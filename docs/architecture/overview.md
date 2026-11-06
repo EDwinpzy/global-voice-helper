@@ -34,8 +34,9 @@ VoiceGatewayService (AccessibilityService)
 - `VoiceAssistantController`：助手会话、最近两轮上下文、模型请求、回答展示和 TTS。
 - `VoiceAssistantOverlay`：不抢焦点的无障碍覆盖层。无障碍服务连接后预热隐藏窗口，
   触发时只切换可见状态；玻璃底图按半分辨率缓存，聆听阶段保持紧凑波纹，不自动展开
-  空白面板；整屏背景每轮只截取并缩小一次，再以静态硬件 RenderNode 模糊，卡片和
-  局部波形独立重绘；静止后立即停止动画。
+  空白面板；输入音频时隐藏背景波纹，只让麦克风圆钮内的动态声波持续起伏；整屏背景
+  每轮只截取并缩小一次，再以静态硬件 RenderNode 模糊，卡片和局部波形独立重绘；
+  静止后立即停止动画。
 - `VoiceHelperSetupActivity`：模型配置、权限和无障碍启用入口。
 - `assistant/`：端点规范化、加密配置存储、Responses API 客户端。
 

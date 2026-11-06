@@ -1239,7 +1239,11 @@ private class MistGlassIslandView(
         val micSave = canvas.save()
         canvas.scale(breathing, breathing, micX, cy)
         drawReferenceButton(canvas, micX, cy, 23.5f * unit)
-        drawCompactMic(canvas, micX, cy, unit)
+        if (animateWave) {
+            drawCompactMicWave(canvas, micX, cy, unit)
+        } else {
+            drawCompactMic(canvas, micX, cy, unit)
+        }
         canvas.restoreToCount(micSave)
 
         val clip = canvas.save()
@@ -1253,14 +1257,6 @@ private class MistGlassIslandView(
                 )
             }
         canvas.clipPath(glassClip)
-        if (animateWave) {
-            drawIslandWave(
-                canvas = canvas,
-                bounds = bounds,
-                unit = unit,
-                transcriptPresent = transcript.isNotBlank(),
-            )
-        }
         if (transcript.isNotBlank()) {
             drawIslandTranscript(canvas, bounds, transcript, unit)
         }
@@ -1310,51 +1306,39 @@ private class MistGlassIslandView(
         referencePaint.style = Paint.Style.FILL
     }
 
-    private fun drawIslandWave(
+    private fun drawCompactMicWave(
         canvas: Canvas,
-        bounds: RectF,
+        cx: Float,
+        cy: Float,
         unit: Float,
-        transcriptPresent: Boolean,
     ) {
-        val centerY = bounds.centerY()
-        val span = 325f * unit
-        val count = ISLAND_WAVE_HEIGHTS.size
-        val step = (span - 6f * unit) / (count - 1f)
+        val count = COMPACT_MIC_WAVE_HEIGHTS.size
+        val step = 4.6f * unit
+        val totalWidth = (count - 1) * step
         val phase =
             if (animationsEnabled()) {
                 (SystemClock.uptimeMillis() - listeningStartedAt) *
-                    0.0048f
+                    0.0062f
             } else {
                 0f
             }
-        val alphaScale = if (transcriptPresent) 0.24f else 1f
+        referencePaint.shader = null
+        referencePaint.style = Paint.Style.FILL
+        referencePaint.color = Color.rgb(251, 251, 253)
         for (index in 0 until count) {
-            val distance = abs(index - (count - 1) / 2f) / ((count - 1) / 2f)
-            val pulse =
-                0.82f +
-                    0.18f *
-                        sin(
-                            phase +
-                                distance * 5.4f +
-                                index * 0.11f,
-                        )
+            val pulse = 0.80f + 0.20f * sin(phase + index * 0.92f)
             val height =
-                (ISLAND_WAVE_HEIGHTS[index] * pulse * unit)
-                    .coerceAtLeast(2.5f * unit)
-            val x = bounds.left + 112f * unit + index * step
-            val barWidth = if (index < 2 || index >= count - 2) 2f else 3f
-            val alpha =
-                ((170f + 70f * (1f - distance)) * alphaScale)
-                    .roundToInt()
-                    .coerceIn(0, 255)
-            referencePaint.color = Color.argb(alpha, 246, 247, 250)
+                (COMPACT_MIC_WAVE_HEIGHTS[index] * 22f * unit * pulse)
+                    .coerceIn(3f * unit, 22f * unit)
+            val x = cx - totalWidth / 2f + index * step
+            val halfWidth = 1.6f * unit
             canvas.drawRoundRect(
-                x - barWidth * unit,
-                centerY - height / 2f,
-                x + barWidth * unit,
-                centerY + height / 2f,
-                barWidth * unit,
-                barWidth * unit,
+                x - halfWidth,
+                cy - height / 2f,
+                x + halfWidth,
+                cy + height / 2f,
+                halfWidth,
+                halfWidth,
                 referencePaint,
             )
         }
@@ -1366,13 +1350,13 @@ private class MistGlassIslandView(
         transcript: String,
         unit: Float,
     ) {
-        referenceText.textSize = 19f * unit
+        referenceText.textSize = 25f * unit
         referenceText.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
         referenceText.alpha = 255
         referenceText.color = Color.rgb(250, 250, 253)
         referenceText.setShadowLayer(2f * unit, 0f, 1f * unit, Color.argb(125, 0, 0, 0))
-        val textLeft = bounds.left + 106f * unit
-        val textRight = bounds.right - 22f * unit
+        val textLeft = bounds.left + 98f * unit
+        val textRight = bounds.right - 18f * unit
         val available = (textRight - textLeft).coerceAtLeast(1f)
         val fitted =
             android.text.TextUtils.ellipsize(
@@ -2452,27 +2436,13 @@ private class MistGlassIslandView(
         const val WAVE_INVALIDATION_PADDING = 96f
         const val TWO_PI = 6.2831855f
         const val PI = 3.1415927f
-        val ISLAND_WAVE_HEIGHTS =
+        val COMPACT_MIC_WAVE_HEIGHTS =
             floatArrayOf(
-                3f,
-                4f,
-                6f,
-                9f,
-                13f,
-                16f,
-                21f,
-                28f,
-                42f,
-                56f,
-                39f,
-                26f,
-                19f,
-                15f,
-                12f,
-                8f,
-                5f,
-                4f,
-                3f,
+                0.34f,
+                0.64f,
+                1f,
+                0.58f,
+                0.40f,
             )
 
     }

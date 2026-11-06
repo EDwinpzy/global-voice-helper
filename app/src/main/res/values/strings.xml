@@ -11,6 +11,7 @@
     <string name="assistant_timeout">语音输入超时，请重新按住语音键</string>
     <string name="assistant_microphone_unavailable">无法启动麦克风，请检查语音输入权限</string>
     <string name="assistant_unavailable">语音助手暂时无法回答，请稍后再试。</string>
+    <string name="assistant_video_pro_unavailable">未安装 Video Pro，或当前版本不支持语音搜索。</string>
     <string name="microphone_channel_name">语音听写</string>
     <string name="microphone_notification_title">正在使用原厂语音识别</string>
     <string name="microphone_notification_description">松开遥控器语音键后处理识别结果</string>

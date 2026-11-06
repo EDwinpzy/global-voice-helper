@@ -327,6 +327,23 @@ internal class VoiceAssistantController(
             fail(context.getString(R.string.assistant_no_speech))
             return
         }
+        VideoSearchCommandParser.parse(transcript)?.let { query ->
+            if (!isCurrent(token)) return
+            if (VideoSearchLauncher.open(context, query)) {
+                main.removeCallbacks(listeningTimeout)
+                main.removeCallbacks(resultTimeout)
+                clearDisplayDismiss()
+                session.cancel()
+                history.clear()
+                factorySuppressor.finish()
+                tts.cancel()
+                overlay.dismiss()
+                Log.i(TAG, "video-search launched chars=${query.length}")
+            } else {
+                showFailure(token, context.getString(R.string.assistant_video_pro_unavailable))
+            }
+            return
+        }
         answerJob?.cancel()
         answerJob =
             scope.launch {

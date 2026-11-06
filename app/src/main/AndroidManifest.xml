@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="com.dongpiandi.videopro.permission.VOICE_SEARCH" />
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
@@ -13,6 +14,7 @@
     <queries>
         <package android:name="com.jmgo.ai.voice" />
         <package android:name="com.jmgo.hippo" />
+        <package android:name="com.dongpiandi.videopro" />
     </queries>
 
     <application

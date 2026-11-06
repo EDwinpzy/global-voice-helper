@@ -75,7 +75,8 @@ gradle/       Gradle Wrapper
 ```
 
 Debug 构建包含仅本地 QA 使用的 `DUMP` 权限广播入口，用于注入文本和 PCM。
-这些入口不会进入未来的 release 构建。
+注入的 PCM 只影响下一次识别，之后自动恢复真实麦克风；这些入口不会进入未来的
+release 构建。
 
 ## 适用边界
 

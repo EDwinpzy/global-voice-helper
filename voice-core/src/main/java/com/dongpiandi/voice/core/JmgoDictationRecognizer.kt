@@ -43,8 +43,7 @@ internal class JmgoDictationRecognizer(
     @Volatile
     private var runtime: VendorRuntime? = null
 
-    @Volatile
-    private var injectedPcm: ByteArray? = null
+    private val injectedPcm = OneShotPcmInjection()
 
     fun prewarm() {
         engineExecutor.execute {
@@ -58,12 +57,12 @@ internal class JmgoDictationRecognizer(
     }
 
     fun useInjectedPcmForTest(pcm: ByteArray?) {
-        injectedPcm = pcm
+        injectedPcm.replace(pcm)
         Log.i(TAG, "injected audio ${if (pcm == null) "disabled" else "bytes=${pcm.size}"}")
     }
 
     override fun start(listener: SystemDictationRecognizer.Listener) {
-        val session = Session(listener, injectedPcm)
+        val session = Session(listener, injectedPcm.consume())
         val previous =
             synchronized(sessionLock) {
                 val old = activeSession

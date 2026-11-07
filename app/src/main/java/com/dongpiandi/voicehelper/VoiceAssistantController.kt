@@ -13,6 +13,7 @@ import com.dongpiandi.voice.core.SystemDictationRecognizerFactory
 import com.dongpiandi.voice.core.VendorAssistantSuppressor
 import com.dongpiandi.voicehelper.assistant.AssistantConfigStore
 import com.dongpiandi.voicehelper.assistant.ConversationHistory
+import com.dongpiandi.voicehelper.assistant.MediaIntent
 import com.dongpiandi.voicehelper.assistant.OpenAiChatClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -327,21 +328,20 @@ internal class VoiceAssistantController(
             fail(context.getString(R.string.assistant_no_speech))
             return
         }
+        MusicPlayCommandParser.parse(transcript)?.let { query ->
+            launchMusic(token, query)
+            return
+        }
+        LiveFootballCommandParser.parse(transcript)?.let { request ->
+            launchLiveFootball(token, request.query)
+            return
+        }
+        if (AmbiguousMediaCommandParser.parse(transcript) != null) {
+            classifyAmbiguousMedia(transcript, token)
+            return
+        }
         VideoSearchCommandParser.parse(transcript)?.let { query ->
-            if (!isCurrent(token)) return
-            if (VideoSearchLauncher.open(context, query)) {
-                main.removeCallbacks(listeningTimeout)
-                main.removeCallbacks(resultTimeout)
-                clearDisplayDismiss()
-                session.cancel()
-                history.clear()
-                factorySuppressor.finish()
-                tts.cancel()
-                overlay.dismiss()
-                Log.i(TAG, "video-search launched chars=${query.length}")
-            } else {
-                showFailure(token, context.getString(R.string.assistant_video_pro_unavailable))
-            }
+            launchVideo(token, query)
             return
         }
         answerJob?.cancel()
@@ -384,6 +384,102 @@ internal class VoiceAssistantController(
                     showFailure(token, context.getString(R.string.assistant_unavailable))
                 }
             }
+    }
+
+    private fun classifyAmbiguousMedia(
+        transcript: String,
+        token: Int,
+    ) {
+        answerJob?.cancel()
+        answerJob =
+            scope.launch {
+                val intent =
+                    try {
+                        chatClient.classifyMediaIntent(transcript)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        Log.w(TAG, "media-intent classification failed: ${error.javaClass.simpleName}")
+                        null
+                    }
+                if (!isCurrent(token)) return@launch
+                Log.i(TAG, "media-intent classified type=${intent?.name ?: "unknown"}")
+                when (intent) {
+                    MediaIntent.MUSIC -> {
+                        val query = MusicPlayCommandParser.parse(transcript, allowImplicitMusic = true)
+                        if (query == null) {
+                            showFailure(token, context.getString(R.string.assistant_media_intent_unknown))
+                        } else {
+                            launchMusic(token, query)
+                        }
+                    }
+                    MediaIntent.VIDEO -> {
+                        val query = VideoSearchCommandParser.parse(transcript)
+                        if (query == null) {
+                            showFailure(token, context.getString(R.string.assistant_media_intent_unknown))
+                        } else {
+                            launchVideo(token, query)
+                        }
+                    }
+                    MediaIntent.LIVE ->
+                        launchLiveFootball(
+                            token,
+                            LiveFootballCommandParser.extractQuery(transcript),
+                        )
+                    null ->
+                        showFailure(token, context.getString(R.string.assistant_media_intent_unknown))
+                }
+            }
+    }
+
+    private fun launchMusic(
+        token: Int,
+        query: String,
+    ) {
+        if (!isCurrent(token)) return
+        if (MusicPlayLauncher.open(context, query)) {
+            finishExternalLaunch()
+            Log.i(TAG, "music-play launched chars=${query.length}")
+        } else {
+            showFailure(token, context.getString(R.string.assistant_music_app_unavailable))
+        }
+    }
+
+    private fun launchVideo(
+        token: Int,
+        query: String,
+    ) {
+        if (!isCurrent(token)) return
+        if (VideoSearchLauncher.open(context, query)) {
+            finishExternalLaunch()
+            Log.i(TAG, "video-search launched chars=${query.length}")
+        } else {
+            showFailure(token, context.getString(R.string.assistant_video_pro_unavailable))
+        }
+    }
+
+    private fun launchLiveFootball(
+        token: Int,
+        query: String?,
+    ) {
+        if (!isCurrent(token)) return
+        if (LiveFootballLauncher.open(context, query)) {
+            finishExternalLaunch()
+            Log.i(TAG, "football-live launched chars=${query?.length ?: 0}")
+        } else {
+            showFailure(token, context.getString(R.string.assistant_live_football_unavailable))
+        }
+    }
+
+    private fun finishExternalLaunch() {
+        main.removeCallbacks(listeningTimeout)
+        main.removeCallbacks(resultTimeout)
+        clearDisplayDismiss()
+        session.cancel()
+        history.clear()
+        factorySuppressor.finish()
+        tts.cancel()
+        overlay.dismiss()
     }
 
     private fun showFailure(

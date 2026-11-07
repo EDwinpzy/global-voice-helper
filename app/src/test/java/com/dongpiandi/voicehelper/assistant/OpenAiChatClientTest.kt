@@ -572,6 +572,42 @@ class OpenAiChatClientTest {
         assertEquals(1, server.requestCount)
     }
 
+    @Test
+    fun classifyMediaIntentUsesDedicatedNoSearchRequest() = runBlocking {
+        server.enqueue(plainAnswerResponse("MUSIC"))
+
+        val result = newClient().classifyMediaIntent("播放晴天")
+
+        assertEquals(MediaIntent.MUSIC, result)
+        val body = JSONObject(requireRequest().body.readUtf8())
+        assertFalse(body.has("tools"))
+        assertTrue(body.getString("instructions").contains("只输出一个词"))
+        assertEquals(
+            OpenAiChatClient.MEDIA_INTENT_MAX_OUTPUT_TOKENS,
+            body.getInt("max_output_tokens"),
+        )
+        assertEquals(
+            "用户原话：播放晴天",
+            body.getJSONArray("input")
+                .getJSONObject(0)
+                .getJSONArray("content")
+                .getJSONObject(0)
+                .getString("text"),
+        )
+    }
+
+    @Test
+    fun classifyMediaIntentParsesVideoAndUnknown() = runBlocking {
+        server.enqueue(plainAnswerResponse("VIDEO"))
+        server.enqueue(plainAnswerResponse("LIVE"))
+        server.enqueue(plainAnswerResponse("UNKNOWN"))
+
+        val client = newClient()
+        assertEquals(MediaIntent.VIDEO, client.classifyMediaIntent("播放流浪地球"))
+        assertEquals(MediaIntent.LIVE, client.classifyMediaIntent("播放英超"))
+        assertNull(client.classifyMediaIntent("播放那个"))
+    }
+
     private fun newClient(
         config: AssistantConfig = config(),
         httpClient: OkHttpClient =

@@ -89,14 +89,68 @@ class OpenAiChatClient(
         return ChatResult(SAFE_UNAVAILABLE_MESSAGE, "")
     }
 
+    /**
+     * Asks the configured model whether an ambiguous "播放 X" request means a video or a song.
+     * This request deliberately has no web-search tool and a very small output budget.
+     */
+    suspend fun classifyMediaIntent(userPrompt: String): MediaIntent? {
+        val transcript = userPrompt.trim().take(MEDIA_INTENT_MAX_PROMPT_CHARS)
+        if (transcript.isEmpty()) return null
+
+        val config =
+            try {
+                configProvider()
+            } catch (_: AssistantConfigurationException) {
+                return null
+            }
+        if (!AssistantConfigPolicy.isApiKeyUsable(config.apiKey)) return null
+        val endpoint =
+            try {
+                ChatEndpointPolicy.responsesUrl(config.baseUrl)
+            } catch (_: AssistantConfigurationException) {
+                return null
+            }
+
+        for ((index, model) in models.withIndex()) {
+            currentCoroutineContext().ensureActive()
+            try {
+                val configuredTimeout =
+                    attemptTimeoutsMs.getOrNull(index)
+                        ?: attemptTimeoutsMs.lastOrNull()
+                        ?: MEDIA_INTENT_TIMEOUT_MS
+                val timeoutMs = minOf(configuredTimeout, MEDIA_INTENT_TIMEOUT_MS)
+                val attempt =
+                    withTimeoutOrNull(timeoutMs) {
+                        executeRequest(
+                            buildMediaIntentRequest(endpoint, config, model, transcript),
+                        )
+                    } ?: continue
+                return parseMediaIntentAnswer(attempt.answer)
+            } catch (_: AuthenticationRejectedException) {
+                return null
+            } catch (_: RetryableChatAttemptException) {
+                continue
+            } catch (_: NonRetryableChatAttemptException) {
+                return null
+            } catch (_: IOException) {
+                continue
+            } catch (_: JSONException) {
+                continue
+            }
+        }
+        return null
+    }
+
     private suspend fun executeAttempt(
         endpoint: String,
         config: AssistantConfig,
         model: String,
         userPrompt: String,
         history: List<ConversationTurn>,
-    ): AttemptAnswer {
-        val request = buildRequest(endpoint, config, model, userPrompt, history)
+    ): AttemptAnswer =
+        executeRequest(buildRequest(endpoint, config, model, userPrompt, history))
+
+    private suspend fun executeRequest(request: Request): AttemptAnswer {
         return suspendCancellableCoroutine { continuation ->
             val call = httpClient.newCall(request)
             continuation.invokeOnCancellation { call.cancel() }
@@ -149,6 +203,34 @@ class OpenAiChatClient(
                 .put("store", false)
                 .put("stream", false)
                 .put("max_output_tokens", MAX_OUTPUT_TOKENS)
+                .toString()
+        return Request.Builder()
+            .url(endpoint)
+            .header("Accept", "application/json")
+            .apply {
+                val apiKey = config.apiKey.trim()
+                if (apiKey.isNotEmpty()) {
+                    header("Authorization", "Bearer $apiKey")
+                }
+            }
+            .post(payload.toRequestBody(JSON_MEDIA_TYPE))
+            .build()
+    }
+
+    private fun buildMediaIntentRequest(
+        endpoint: String,
+        config: AssistantConfig,
+        model: String,
+        transcript: String,
+    ): Request {
+        val payload =
+            JSONObject()
+                .put("model", model)
+                .put("instructions", MEDIA_INTENT_INSTRUCTIONS)
+                .put("input", buildInput("用户原话：$transcript"))
+                .put("store", false)
+                .put("stream", false)
+                .put("max_output_tokens", MEDIA_INTENT_MAX_OUTPUT_TOKENS)
                 .toString()
         return Request.Builder()
             .url(endpoint)
@@ -373,6 +455,9 @@ class OpenAiChatClient(
         const val SEARCH_CONTEXT_SIZE = "medium"
         const val MAX_ANSWER_CHARS = 300
         const val MIN_TRUNCATE_CHARS = 120
+        const val MEDIA_INTENT_MAX_OUTPUT_TOKENS = 32
+        const val MEDIA_INTENT_TIMEOUT_MS = 15_000L
+        const val MEDIA_INTENT_MAX_PROMPT_CHARS = 200
 
         const val SAFE_EMPTY_PROMPT_MESSAGE = "没有识别到要询问的内容。"
         const val SAFE_CONFIGURATION_MESSAGE = "语音助手尚未配置完整。"
@@ -411,6 +496,17 @@ class OpenAiChatClient(
             3. 《怪兽电力公司》：设定有趣，但几段追逐可能吓到胆小的孩子。
 
             如果只选一部，选《机器人总动员》。
+            """.trimIndent()
+
+        private val MEDIA_INTENT_INSTRUCTIONS =
+            """
+            你是电视应用的点播类型分类器。判断用户说的“播放/放/我想播放”对象是视频、音乐，还是体育直播。
+            只输出一个词：VIDEO、MUSIC、LIVE 或 UNKNOWN。
+            歌曲、歌名、歌手、专辑、音乐相关对象输出 MUSIC。
+            电影、电视剧、动漫、综艺、短剧、视频相关对象输出 VIDEO。
+            足球、球赛、英超、欧冠、世界杯等体育比赛、直播或看球相关对象输出 LIVE。
+            看不出对象是哪一种时输出 UNKNOWN。
+            不要解释，不要标点，不要输出其他文字。
             """.trimIndent()
 
         private val ANSWER_BOUNDARIES = charArrayOf('。', '！', '？', '；', '\n')

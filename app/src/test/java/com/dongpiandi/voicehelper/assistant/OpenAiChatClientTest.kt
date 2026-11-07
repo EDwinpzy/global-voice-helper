@@ -1,6 +1,7 @@
 package com.dongpiandi.voicehelper.assistant
 
 import java.net.SocketTimeoutException
+import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
@@ -75,7 +76,12 @@ class OpenAiChatClientTest {
         assertTrue(body.getString("instructions").contains("回答简洁。"))
         assertTrue(body.getString("instructions").contains("web_search"))
         assertTrue(body.getString("instructions").contains("必须使用阿拉伯数字"))
-        assertFalse(body.getString("instructions").contains("当前时间"))
+        assertTrue(body.getString("instructions").contains("当前时间：2026年11月7日"))
+        assertTrue(body.getString("instructions").contains("当前时间的 RFC 3339 表示"))
+        assertTrue(body.getString("instructions").contains("Asia/Shanghai"))
+        assertTrue(body.getString("instructions").contains("SCHEDULE_REMINDER"))
+        assertTrue(body.getString("instructions").contains("autoRunFollowUp"))
+        assertTrue(body.getString("instructions").contains("OPEN_LIVE_FOOTBALL"))
         assertFalse(body.getBoolean("store"))
         assertFalse(body.getBoolean("stream"))
         assertFalse(body.getBoolean("parallel_tool_calls"))
@@ -533,6 +539,153 @@ class OpenAiChatClientTest {
     }
 
     @Test
+    fun modelSelectedLiveFootballActionIsParsedWithoutLeakingJson() = runBlocking {
+        server.enqueue(
+            plainAnswerResponse(
+                """
+                {
+                  "answer": "正在打开阿森纳直播。",
+                  "action": {
+                    "type": "OPEN_LIVE_FOOTBALL",
+                    "query": "阿森纳"
+                  }
+                }
+                """.trimIndent(),
+            ),
+        )
+
+        val result = newClient().complete("今晚想看阿森纳")
+
+        assertEquals("正在打开阿森纳直播。", result.answer)
+        assertEquals(AssistantAction.OpenLiveFootball("阿森纳"), result.action)
+        assertFalse(result.answer.contains("OPEN_LIVE_FOOTBALL"))
+    }
+
+    @Test
+    fun modelSelectedReminderCarriesItsFollowUpAction() = runBlocking {
+        server.enqueue(
+            plainAnswerResponse(
+                """
+                {
+                  "answer": "已安排上线当天上午提醒你。",
+                  "action": {
+                    "type": "SCHEDULE_REMINDER",
+                    "triggerAt": "2026-12-31T09:00:00+08:00",
+                    "title": "《示例电影》上线提醒",
+                    "message": "《示例电影》今天上线，要现在查找观看吗？",
+                    "confirmLabel": "现在查找",
+                    "followUp": {
+                      "type": "OPEN_VIDEO_SEARCH",
+                      "query": "示例电影",
+                      "openFirstResult": false
+                    }
+                  }
+                }
+                """.trimIndent(),
+            ),
+        )
+
+        val result = newClient().complete("等它上线提醒我，到时候问我要不要看")
+
+        assertEquals("已安排上线当天上午提醒你。", result.answer)
+        val action = result.action as AssistantAction.ScheduleReminder
+        assertEquals("《示例电影》上线提醒", action.title)
+        assertEquals(
+            AssistantAction.OpenVideoSearch(
+                query = "示例电影",
+                openFirstResult = false,
+            ),
+            action.followUp,
+        )
+        assertFalse(action.autoRunFollowUp)
+    }
+
+    @Test
+    fun modelSelectedAutoRunMusicReminderKeepsItsFollowUp() = runBlocking {
+        server.enqueue(
+            plainAnswerResponse(
+                """
+                {
+                  "answer": "已安排明晚八点自动播放《晴天》。",
+                  "action": {
+                    "type": "SCHEDULE_REMINDER",
+                    "triggerAt": "2026-11-08T20:00:00+08:00",
+                    "title": "播放《晴天》",
+                    "message": "到点自动播放音乐。",
+                    "autoRunFollowUp": true,
+                    "followUp": {
+                      "type": "OPEN_MUSIC",
+                      "query": "周杰伦 晴天"
+                    }
+                  }
+                }
+                """.trimIndent(),
+            ),
+        )
+
+        val result =
+            newClient().complete("明晚八点直接播放周杰伦的晴天，不要再问我")
+
+        val action = result.action as AssistantAction.ScheduleReminder
+        assertTrue(action.autoRunFollowUp)
+        assertEquals(AssistantAction.OpenMusic("周杰伦 晴天"), action.followUp)
+    }
+
+    @Test
+    fun expiredScheduledActionRetriesAnotherModelInsteadOfBookingIt() = runBlocking {
+        server.enqueue(
+            plainAnswerResponse(
+                """
+                {
+                  "answer": "已经安排。",
+                  "action": {
+                    "type": "SCHEDULE_REMINDER",
+                    "triggerAt": "2026-11-06T09:00:00+08:00",
+                    "title": "过期提醒",
+                    "message": "这条不应该被安排。"
+                  }
+                }
+                """.trimIndent(),
+            ),
+        )
+        server.enqueue(successResponse("\"第二个回答\""))
+
+        val result =
+            newClient(models = listOf("test-primary", "test-secondary"))
+                .complete("明天提醒我")
+
+        assertEquals("第二个回答", result.answer)
+        assertEquals("test-secondary", result.model)
+        assertNull(result.action)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun unknownModelActionRetriesInsteadOfReturningAConfirmation() = runBlocking {
+        server.enqueue(
+            plainAnswerResponse(
+                """
+                {
+                  "answer": "已经处理。",
+                  "action": {
+                    "type": "UNSUPPORTED_DEVICE_ACTION"
+                  }
+                }
+                """.trimIndent(),
+            ),
+        )
+        server.enqueue(successResponse("\"普通回答\""))
+
+        val result =
+            newClient(models = listOf("test-primary", "test-secondary"))
+                .complete("帮我处理一下")
+
+        assertEquals("普通回答", result.answer)
+        assertNull(result.action)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
     fun emptyApiKeyOmitsAuthorizationHeader() = runBlocking {
         server.enqueue(successResponse("\"keyless answer\""))
 
@@ -590,10 +743,21 @@ class OpenAiChatClientTest {
             ChatResult(
                 answer = "private model response",
                 model = OpenAiChatClient.DEFAULT_MODELS[0],
+                action =
+                    AssistantAction.ScheduleReminder(
+                        triggerAtEpochMs = 1_800_000_000_000L,
+                        title = "private reminder title",
+                        message = "private reminder message",
+                        confirmLabel = "private label",
+                        followUp = AssistantAction.OpenVideoSearch("private query", false),
+                    ),
             ).toString()
 
         assertFalse(description.contains("private model response"))
+        assertFalse(description.contains("private reminder"))
+        assertFalse(description.contains("private query"))
         assertTrue(description.contains("workbuddy/deepseek-v4.1-flash"))
+        assertTrue(description.contains("ScheduleReminder"))
     }
 
     @Test
@@ -637,74 +801,6 @@ class OpenAiChatClientTest {
         assertEquals(1, server.requestCount)
     }
 
-    @Test
-    fun classifyMediaIntentUsesDedicatedNoSearchRequest() = runBlocking {
-        server.enqueue(plainAnswerResponse("MUSIC"))
-
-        val result = newClient().classifyMediaIntent("播放晴天")
-
-        assertEquals(MediaIntent.MUSIC, result)
-        val body = JSONObject(requireRequest().body.readUtf8())
-        assertFalse(body.has("tools"))
-        assertTrue(body.getString("instructions").contains("只输出一个词"))
-        assertEquals(
-            OpenAiChatClient.MEDIA_INTENT_MAX_OUTPUT_TOKENS,
-            body.getInt("max_output_tokens"),
-        )
-        assertEquals(
-            "用户原话：播放晴天",
-            body.getJSONArray("input")
-                .getJSONObject(0)
-                .getJSONArray("content")
-                .getJSONObject(0)
-                .getString("text"),
-        )
-    }
-
-    @Test
-    fun classifyMediaIntentParsesVideoAndUnknown() = runBlocking {
-        server.enqueue(plainAnswerResponse("VIDEO"))
-        server.enqueue(plainAnswerResponse("LIVE"))
-        server.enqueue(plainAnswerResponse("UNKNOWN"))
-
-        val client = newClient()
-        assertEquals(MediaIntent.VIDEO, client.classifyMediaIntent("播放流浪地球"))
-        assertEquals(MediaIntent.LIVE, client.classifyMediaIntent("播放英超"))
-        assertNull(client.classifyMediaIntent("播放那个"))
-    }
-
-    @Test
-    fun classifyMediaIntentTimeoutUsesTheFreeFallbackModel() = runBlocking {
-        val attempts = AtomicInteger()
-        val timeout =
-            Interceptor { chain ->
-                if (attempts.incrementAndGet() == 1) {
-                    throw SocketTimeoutException("private timeout detail")
-                }
-                chain.proceed(chain.request())
-            }
-        val httpClient =
-            OkHttpClient.Builder()
-                .addInterceptor(timeout)
-                .retryOnConnectionFailure(false)
-                .build()
-        server.enqueue(plainAnswerResponse("MUSIC"))
-
-        val result =
-            newClient(
-                httpClient = httpClient,
-                models = listOf("test-primary"),
-            ).classifyMediaIntent("播放晴天")
-
-        assertEquals(MediaIntent.MUSIC, result)
-        assertEquals(2, attempts.get())
-        assertEquals(1, server.requestCount)
-        assertEquals(
-            OpenAiChatClient.TIMEOUT_FALLBACK_MODEL,
-            JSONObject(requireRequest().body.readUtf8()).getString("model"),
-        )
-    }
-
     private fun newClient(
         config: AssistantConfig = config(),
         httpClient: OkHttpClient =
@@ -714,6 +810,8 @@ class OpenAiChatClientTest {
         attemptTimeoutsMs: List<Long> = OpenAiChatClient.DEFAULT_ATTEMPT_TIMEOUTS_MS,
         models: List<String> = OpenAiChatClient.DEFAULT_MODELS,
         timeoutFallbackModel: String = OpenAiChatClient.TIMEOUT_FALLBACK_MODEL,
+        nowEpochMs: Long = FIXED_NOW_EPOCH_MS,
+        zoneId: ZoneId = FIXED_ZONE,
     ): OpenAiChatClient =
         OpenAiChatClient(
             configProvider = { config },
@@ -721,6 +819,8 @@ class OpenAiChatClientTest {
             attemptTimeoutsMs = attemptTimeoutsMs,
             models = models,
             timeoutFallbackModel = timeoutFallbackModel,
+            nowProvider = { nowEpochMs },
+            zoneIdProvider = { zoneId },
         )
 
     private fun config(
@@ -786,4 +886,13 @@ class OpenAiChatClientTest {
         checkNotNull(server.takeRequest(2, TimeUnit.SECONDS)) {
             "No request reached MockWebServer"
         }
+
+    private companion object {
+        val FIXED_ZONE: ZoneId = ZoneId.of("Asia/Shanghai")
+        val FIXED_NOW_EPOCH_MS: Long =
+            java.time.ZonedDateTime
+                .of(2026, 11, 7, 20, 0, 0, 0, FIXED_ZONE)
+                .toInstant()
+                .toEpochMilli()
+    }
 }

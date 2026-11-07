@@ -16,10 +16,17 @@ class ScheduledLiveFootballRestoreReceiver : BroadcastReceiver() {
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED,
             AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED,
-            -> runCatching {
-                ScheduledLiveFootballScheduler.rescheduleAll(context)
-            }.onFailure { error ->
-                Log.w(TAG, "reschedule failed type=${error.javaClass.simpleName}")
+            -> {
+                runCatching {
+                    ScheduledLiveFootballScheduler.rescheduleAll(context)
+                }.onFailure { error ->
+                    Log.w(TAG, "football reschedule failed type=${error.javaClass.simpleName}")
+                }
+                runCatching {
+                    ScheduledReminderScheduler.rescheduleAll(context)
+                }.onFailure { error ->
+                    Log.w(TAG, "reminder reschedule failed type=${error.javaClass.simpleName}")
+                }
             }
         }
     }

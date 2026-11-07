@@ -55,6 +55,13 @@
             android:noHistory="true"
             android:theme="@style/Theme.VoiceHelper.SilentLaunch" />
 
+        <activity
+            android:name=".ScheduledReminderActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:theme="@style/Theme.VoiceHelper.SilentLaunch" />
+
         <receiver
             android:name=".ScheduledLiveFootballRestoreReceiver"
             android:exported="true">

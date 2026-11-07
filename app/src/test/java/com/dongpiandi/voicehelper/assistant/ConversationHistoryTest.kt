@@ -47,4 +47,21 @@ class ConversationHistoryTest {
 
         assertTrue(history.snapshot().isEmpty())
     }
+
+    @Test
+    fun expiresOldContextAfterTheConfiguredTtl() {
+        var now = 1_000_000L
+        val history =
+            ConversationHistory(
+                ttlMs = 12_000L,
+                nowProvider = { now },
+            )
+        history.add("问题", "回答")
+
+        now += 11_999L
+        assertEquals(1, history.snapshot().size)
+
+        now += 1L
+        assertTrue(history.snapshot().isEmpty())
+    }
 }

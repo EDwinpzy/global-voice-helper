@@ -13,7 +13,6 @@
     <string name="assistant_unavailable">语音助手暂时无法回答，请稍后再试。</string>
     <string name="assistant_video_pro_unavailable">未安装 Video Pro，或当前版本不支持语音搜索。</string>
     <string name="assistant_music_app_unavailable">未安装 Music，或当前版本不支持语音点歌。</string>
-    <string name="assistant_media_intent_unknown">没判断出要播放电影、音乐还是直播，请说具体一点。</string>
     <string name="assistant_live_football_unavailable">未安装球赛直播应用。</string>
     <string name="assistant_schedule_model_label">定时直播</string>
     <string name="assistant_live_schedule_confirmed">已安排：%1$s 自动打开%2$s直播。</string>
@@ -26,6 +25,14 @@
     <string name="assistant_live_schedule_ambiguous">上一轮有多场相关比赛，请说出球队或具体开赛时间。</string>
     <string name="assistant_live_schedule_already_started">这场比赛的开赛时间已经过去，不能安排定时直播。</string>
     <string name="assistant_live_schedule_failed">定时直播安排失败，请稍后重试。</string>
+    <string name="assistant_reminder_model_label">定时提醒</string>
+    <string name="assistant_reminder_confirmed">已安排：%1$s 提醒你%2$s。</string>
+    <string name="assistant_reminder_confirmed_inexact">已安排：%1$s 提醒你%2$s。系统未允许精确定时，可能会稍有延迟；请到应用设置允许精确定时。</string>
+    <string name="assistant_reminder_failed">定时提醒安排失败，请稍后重试。</string>
+    <string name="assistant_scheduled_action_model_label">定时动作</string>
+    <string name="assistant_scheduled_action_confirmed">已安排：%1$s 自动执行%2$s。</string>
+    <string name="assistant_scheduled_action_confirmed_inexact">已安排：%1$s 自动执行%2$s。系统未允许精确定时，可能会稍有延迟；请到应用设置允许精确定时。</string>
+    <string name="assistant_scheduled_action_failed">定时动作安排失败，请稍后重试。</string>
     <string name="microphone_channel_name">语音听写</string>
     <string name="microphone_notification_title">正在使用原厂语音识别</string>
     <string name="microphone_notification_description">松开遥控器语音键后处理识别结果</string>

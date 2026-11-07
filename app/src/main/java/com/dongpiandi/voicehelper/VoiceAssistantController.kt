@@ -11,9 +11,10 @@ import android.view.KeyEvent
 import com.dongpiandi.voice.core.SystemDictationRecognizer
 import com.dongpiandi.voice.core.SystemDictationRecognizerFactory
 import com.dongpiandi.voice.core.VendorAssistantSuppressor
+import com.dongpiandi.voicehelper.assistant.AssistantAction
 import com.dongpiandi.voicehelper.assistant.AssistantConfigStore
+import com.dongpiandi.voicehelper.assistant.ChatResult
 import com.dongpiandi.voicehelper.assistant.ConversationHistory
-import com.dongpiandi.voicehelper.assistant.MediaIntent
 import com.dongpiandi.voicehelper.assistant.OpenAiChatClient
 import java.time.Instant
 import java.time.ZoneId
@@ -234,7 +235,6 @@ internal class VoiceAssistantController(
         session.cancel()
         tts.cancel()
         factorySuppressor.begin()
-        if (!overlay.isShowing) history.clear()
         overlay.showListening()
 
         if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
@@ -333,26 +333,6 @@ internal class VoiceAssistantController(
             fail(context.getString(R.string.assistant_no_speech))
             return
         }
-        LiveFootballScheduleCommandParser.parse(transcript)?.let { request ->
-            scheduleLiveFootball(token, transcript, request)
-            return
-        }
-        MusicPlayCommandParser.parse(transcript)?.let { query ->
-            launchMusic(token, query)
-            return
-        }
-        LiveFootballCommandParser.parse(transcript)?.let { request ->
-            launchLiveFootball(token, request.query)
-            return
-        }
-        if (AmbiguousMediaCommandParser.parse(transcript) != null) {
-            classifyAmbiguousMedia(transcript, token)
-            return
-        }
-        VideoSearchCommandParser.parse(transcript)?.let { request ->
-            launchVideo(token, request)
-            return
-        }
         answerJob?.cancel()
         answerJob =
             scope.launch {
@@ -361,37 +341,23 @@ internal class VoiceAssistantController(
                     val result = chatClient.complete(transcript, history.snapshot())
                     if (!isCurrent(token)) return@launch
                     if (result.model.isBlank() || result.answer.isBlank()) {
+                        if (runLocalFallback(transcript, token)) {
+                            Log.i(TAG, "assistant model unavailable; local fallback handled request")
+                            return@launch
+                        }
                         showFailure(token, result.answer.ifBlank {
                             context.getString(R.string.assistant_unavailable)
                         })
                         return@launch
                     }
-                    val historyTurns = history.snapshot().size
-                    history.add(transcript, result.answer)
-                    if (LiveFootballScheduleResolver.isFootballScheduleQuestion(transcript)) {
-                        liveFootballContext =
-                            LiveFootballContext(
-                                answer = result.answer,
-                                capturedAtEpochMs = System.currentTimeMillis(),
-                            )
-                    }
-                    factorySuppressor.stopPending()
-                    tts.cancel()
-                    overlay.showAnswer(
-                        transcript,
-                        result.answer,
-                        result.model,
-                        result.usedWebSearch,
-                    )
-                    tts.speak(result.answer)
+                    handleModelResult(token, transcript, result)
                     Log.i(
                         TAG,
                         "assistant answered model=${result.model} " +
                             "webSearch=${result.usedWebSearch} chars=${result.answer.length} " +
-                            "historyTurns=$historyTurns " +
+                            "action=${result.action?.let { it::class.simpleName } ?: "none"} " +
                             "elapsedMs=${SystemClock.elapsedRealtime() - requestStartedAt}",
                     )
-                    scheduleDismiss(result.answer.length)
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
@@ -402,50 +368,159 @@ internal class VoiceAssistantController(
             }
     }
 
-    private fun classifyAmbiguousMedia(
+    private fun handleModelResult(
+        token: Int,
+        transcript: String,
+        result: ChatResult,
+    ) {
+        when (val action = result.action) {
+            null -> showModelAnswer(token, transcript, result)
+            is AssistantAction.OpenLiveFootball ->
+                launchLiveFootball(token, action.query)
+            is AssistantAction.OpenVideoSearch ->
+                launchVideo(
+                    token,
+                    VideoSearchRequest(
+                        query = action.query,
+                        openFirstResult = action.openFirstResult,
+                    ),
+                )
+            is AssistantAction.OpenMusic ->
+                launchMusic(token, action.query)
+            is AssistantAction.ScheduleLiveFootball ->
+                scheduleLiveFootball(token, transcript, action)
+            is AssistantAction.ScheduleReminder ->
+                scheduleReminder(token, transcript, action)
+        }
+    }
+
+    private fun showModelAnswer(
+        token: Int,
+        transcript: String,
+        result: ChatResult,
+    ) {
+        if (!isCurrent(token)) return
+        history.add(transcript, result.answer)
+        if (LiveFootballScheduleResolver.isFootballScheduleQuestion(transcript)) {
+            liveFootballContext =
+                LiveFootballContext(
+                    answer = result.answer,
+                    capturedAtEpochMs = System.currentTimeMillis(),
+                )
+        }
+        factorySuppressor.stopPending()
+        tts.cancel()
+        overlay.showAnswer(
+            transcript,
+            result.answer,
+            result.model,
+            result.usedWebSearch,
+        )
+        tts.speak(result.answer)
+        scheduleDismiss(result.answer.length)
+    }
+
+    private fun runLocalFallback(
         transcript: String,
         token: Int,
+    ): Boolean {
+        LiveFootballScheduleCommandParser.parse(transcript)?.let { request ->
+            scheduleLiveFootballFallback(token, transcript, request)
+            return true
+        }
+        MusicPlayCommandParser.parse(transcript)?.let { query ->
+            launchMusic(token, query)
+            return true
+        }
+        LiveFootballCommandParser.parse(transcript)?.let { request ->
+            launchLiveFootball(token, request.query)
+            return true
+        }
+        VideoSearchCommandParser.parse(transcript)?.let { request ->
+            launchVideo(token, request)
+            return true
+        }
+        return false
+    }
+
+    private fun scheduleReminder(
+        token: Int,
+        transcript: String,
+        action: AssistantAction.ScheduleReminder,
     ) {
-        answerJob?.cancel()
-        answerJob =
-            scope.launch {
-                val intent =
-                    try {
-                        chatClient.classifyMediaIntent(transcript)
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (error: Exception) {
-                        Log.w(TAG, "media-intent classification failed: ${error.javaClass.simpleName}")
-                        null
-                    }
-                if (!isCurrent(token)) return@launch
-                Log.i(TAG, "media-intent classified type=${intent?.name ?: "unknown"}")
-                when (intent) {
-                    MediaIntent.MUSIC -> {
-                        val query = MusicPlayCommandParser.parse(transcript, allowImplicitMusic = true)
-                        if (query == null) {
-                            showFailure(token, context.getString(R.string.assistant_media_intent_unknown))
+        if (!isCurrent(token)) return
+        val nowEpochMs = System.currentTimeMillis()
+        if (action.followUp is AssistantAction.OpenLiveFootball &&
+            !LiveFootballLauncher.isInstalled(context)
+        ) {
+            showFailure(
+                token,
+                context.getString(R.string.assistant_live_football_unavailable),
+            )
+            return
+        }
+        val booking =
+            try {
+                ScheduledReminderScheduler.schedule(
+                    context = context,
+                    triggerAtEpochMs = action.triggerAtEpochMs,
+                    title = action.title,
+                    message = action.message,
+                    confirmLabel = action.confirmLabel,
+                    followUp = action.followUp,
+                    autoRunFollowUp = action.autoRunFollowUp,
+                    nowEpochMs = nowEpochMs,
+                )
+            } catch (error: Exception) {
+                Log.w(TAG, "reminder schedule failed type=${error.javaClass.simpleName}")
+                showFailure(
+                    token,
+                    context.getString(
+                        if (action.autoRunFollowUp) {
+                            R.string.assistant_scheduled_action_failed
                         } else {
-                            launchMusic(token, query)
-                        }
-                    }
-                    MediaIntent.VIDEO -> {
-                        val request = VideoSearchCommandParser.parse(transcript)
-                        if (request == null) {
-                            showFailure(token, context.getString(R.string.assistant_media_intent_unknown))
-                        } else {
-                            launchVideo(token, request)
-                        }
-                    }
-                    MediaIntent.LIVE ->
-                        launchLiveFootball(
-                            token,
-                            LiveFootballCommandParser.extractQuery(transcript),
-                        )
-                    null ->
-                        showFailure(token, context.getString(R.string.assistant_media_intent_unknown))
-                }
+                            R.string.assistant_reminder_failed
+                        },
+                    ),
+                )
+                return
             }
+        val scheduledTime =
+            DateTimeFormatter
+                .ofPattern("M月d日 HH:mm", Locale.CHINA)
+                .withZone(ZoneId.systemDefault())
+                .format(Instant.ofEpochMilli(action.triggerAtEpochMs))
+        val exact = booking.exactness == ScheduledReminderExactness.EXACT
+        val template =
+            when {
+                action.autoRunFollowUp && exact ->
+                    R.string.assistant_scheduled_action_confirmed
+                action.autoRunFollowUp ->
+                    R.string.assistant_scheduled_action_confirmed_inexact
+                exact ->
+                    R.string.assistant_reminder_confirmed
+                else ->
+                    R.string.assistant_reminder_confirmed_inexact
+            }
+        val answer = context.getString(template, scheduledTime, action.title)
+        showLocalAnswer(
+            token = token,
+            transcript = transcript,
+            answer = answer,
+            modelLabel =
+                context.getString(
+                    if (action.autoRunFollowUp) {
+                        R.string.assistant_scheduled_action_model_label
+                    } else {
+                        R.string.assistant_reminder_model_label
+                    },
+                ),
+        )
+        Log.i(
+            TAG,
+            "reminder schedule set exact=${booking.exactness.name} " +
+                "auto=${action.autoRunFollowUp} hasFollowUp=${action.followUp != null}",
+        )
     }
 
     private fun launchMusic(
@@ -494,6 +569,20 @@ internal class VoiceAssistantController(
     private fun scheduleLiveFootball(
         token: Int,
         transcript: String,
+        action: AssistantAction.ScheduleLiveFootball,
+    ) {
+        bookLiveFootball(
+            token = token,
+            transcript = transcript,
+            query = action.query,
+            displayName = action.displayName,
+            kickoffAtEpochMs = action.kickoffAtEpochMs,
+        )
+    }
+
+    private fun scheduleLiveFootballFallback(
+        token: Int,
+        transcript: String,
         request: LiveFootballScheduleRequest,
     ) {
         if (!isCurrent(token)) return
@@ -506,61 +595,14 @@ internal class VoiceAssistantController(
                 zone = ZoneId.systemDefault(),
             )
         when (resolution) {
-            is LiveFootballScheduleResolution.Ready -> {
-                if (!LiveFootballLauncher.isInstalled(context)) {
-                    showFailure(
-                        token,
-                        context.getString(R.string.assistant_live_football_unavailable),
-                    )
-                    return
-                }
-                val booking =
-                    try {
-                        ScheduledLiveFootballScheduler.schedule(
-                            context = context,
-                            query = resolution.schedule.query,
-                            kickoffAtEpochMs = resolution.schedule.kickoffAtEpochMs,
-                            nowEpochMs = nowEpochMs,
-                        )
-                    } catch (error: Exception) {
-                        Log.w(TAG, "football schedule failed type=${error.javaClass.simpleName}")
-                        showFailure(
-                            token,
-                            context.getString(R.string.assistant_live_schedule_failed),
-                        )
-                        return
-                    }
-                val displayName = resolution.schedule.displayName
-                val answer =
-                    if (resolution.schedule.kickoffAtEpochMs <= nowEpochMs + 1_000L) {
-                        val template =
-                            if (booking.exactness == ScheduledLiveFootballExactness.EXACT) {
-                                R.string.assistant_live_schedule_started_now
-                            } else {
-                                R.string.assistant_live_schedule_started_now_inexact
-                            }
-                        context.getString(template, displayName)
-                    } else {
-                        val scheduledTime =
-                            DateTimeFormatter
-                                .ofPattern("M月d日 HH:mm", Locale.CHINA)
-                                .withZone(ZoneId.systemDefault())
-                                .format(Instant.ofEpochMilli(resolution.schedule.kickoffAtEpochMs))
-                        val template =
-                            if (booking.exactness == ScheduledLiveFootballExactness.EXACT) {
-                                R.string.assistant_live_schedule_confirmed
-                            } else {
-                                R.string.assistant_live_schedule_confirmed_inexact
-                            }
-                        context.getString(template, scheduledTime, displayName)
-                    }
-                showLocalAnswer(token, transcript, answer)
-                Log.i(
-                    TAG,
-                    "football schedule set exact=${booking.exactness.name} " +
-                        "chars=${displayName.length}",
+            is LiveFootballScheduleResolution.Ready ->
+                bookLiveFootball(
+                    token = token,
+                    transcript = transcript,
+                    query = resolution.schedule.query,
+                    displayName = resolution.schedule.displayName,
+                    kickoffAtEpochMs = resolution.schedule.kickoffAtEpochMs,
                 )
-            }
             LiveFootballScheduleResolution.NoContext ->
                 showFailure(
                     token,
@@ -589,10 +631,79 @@ internal class VoiceAssistantController(
         }
     }
 
+    private fun bookLiveFootball(
+        token: Int,
+        transcript: String,
+        query: String,
+        displayName: String,
+        kickoffAtEpochMs: Long,
+    ) {
+        if (!isCurrent(token)) return
+        if (!LiveFootballLauncher.isInstalled(context)) {
+            showFailure(
+                token,
+                context.getString(R.string.assistant_live_football_unavailable),
+            )
+            return
+        }
+        val nowEpochMs = System.currentTimeMillis()
+        val booking =
+            try {
+                ScheduledLiveFootballScheduler.schedule(
+                    context = context,
+                    query = query,
+                    kickoffAtEpochMs = kickoffAtEpochMs,
+                    nowEpochMs = nowEpochMs,
+                )
+            } catch (error: Exception) {
+                Log.w(TAG, "football schedule failed type=${error.javaClass.simpleName}")
+                showFailure(
+                    token,
+                    context.getString(R.string.assistant_live_schedule_failed),
+                )
+                return
+            }
+        val answer =
+            if (kickoffAtEpochMs <= nowEpochMs + 1_000L) {
+                val template =
+                    if (booking.exactness == ScheduledLiveFootballExactness.EXACT) {
+                        R.string.assistant_live_schedule_started_now
+                    } else {
+                        R.string.assistant_live_schedule_started_now_inexact
+                    }
+                context.getString(template, displayName)
+            } else {
+                val scheduledTime =
+                    DateTimeFormatter
+                        .ofPattern("M月d日 HH:mm", Locale.CHINA)
+                        .withZone(ZoneId.systemDefault())
+                        .format(Instant.ofEpochMilli(kickoffAtEpochMs))
+                val template =
+                    if (booking.exactness == ScheduledLiveFootballExactness.EXACT) {
+                        R.string.assistant_live_schedule_confirmed
+                    } else {
+                        R.string.assistant_live_schedule_confirmed_inexact
+                    }
+                context.getString(template, scheduledTime, displayName)
+            }
+        showLocalAnswer(
+            token = token,
+            transcript = transcript,
+            answer = answer,
+            modelLabel = context.getString(R.string.assistant_schedule_model_label),
+        )
+        Log.i(
+            TAG,
+            "football schedule set exact=${booking.exactness.name} " +
+                "chars=${displayName.length}",
+        )
+    }
+
     private fun showLocalAnswer(
         token: Int,
         transcript: String,
         answer: String,
+        modelLabel: String,
     ) {
         if (!isCurrent(token)) return
         history.add(transcript, answer)
@@ -601,7 +712,7 @@ internal class VoiceAssistantController(
         overlay.showAnswer(
             transcript,
             answer,
-            context.getString(R.string.assistant_schedule_model_label),
+            modelLabel,
             false,
         )
         tts.speak(answer)
@@ -662,7 +773,6 @@ internal class VoiceAssistantController(
     private fun finishDisplayedTurn() {
         if (session.state != AssistantTurnSession.State.RESPONDING) return
         session.cancel()
-        history.clear()
         tts.cancel()
         overlay.dismiss()
     }

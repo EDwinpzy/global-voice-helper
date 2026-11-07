@@ -52,6 +52,9 @@ class VoiceHelperSetupActivity : Activity() {
         runCatching {
             ScheduledLiveFootballScheduler.rescheduleAll(this)
         }
+        runCatching {
+            ScheduledReminderScheduler.rescheduleAll(this)
+        }
         refreshStatus()
     }
 

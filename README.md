@@ -26,12 +26,20 @@ GitHub 私有仓库：<https://github.com/EDwinpzy/global-voice-helper>
 - 无输入框助手会带上最近两轮对话；普通问题使用中等搜索上下文，最多搜索两次；
   回答按“结论 + 关键点 + 建议”组织；每个完整句子单独成行，多项内容使用
   阿拉伯数字编号并留出间距，且限制在覆盖层可完整显示的长度内。
-- 明确的“播放/打开/我要看”命令会请求 Video Pro 自动打开首条搜索结果；
-  “搜索/帮我找”类命令停留在搜索结果页。目标 Activity 由 signature 权限保护，
+- 设备操作不靠固定句式预先分流。模型读取当前时间、时区和最近对话，自行判断应普通
+  回答、立即打开，还是安排未来动作；只有模型配置或网络完全不可用时才使用本地命令
+  兼容兜底。可执行动作仍是封闭白名单，不接受模型生成任意 Intent 或脚本。
+- 模型判断用户要直接播放/打开影视时，会请求 Video Pro 自动打开首条搜索结果；
+  判断为“搜索/帮我找”时停留在搜索结果页。目标 Activity 由 signature 权限保护，
   Intent 契约见 [Video Pro TV README](https://github.com/EDwinpzy/video-pro/blob/main/frontend-tv/README.md#voice-search-intent)。
-- 问完今晚足球赛程后，可以说“阿森纳比赛开始时帮我打开直播”。助手会从上一轮回答
-  提取球队和开赛时间，使用系统闹钟跨应用定时；到点由球迹直播应用打开对应比赛。
+- 问完今晚足球赛程后，可以自然地说希望某场比赛到点自动打开。模型结合上一轮赛程和
+  当前时间生成定时动作，使用系统闹钟跨应用定时；到点由球迹直播应用打开对应比赛。
   精确定时需要系统“闹钟和提醒”权限，未授权时会降级为近似时间并明确提示。
+- 通用提醒：可以要求在未来某个已知时刻提醒，例如电影上线当天询问是否立即查看。
+  到点会显示提醒并由原厂 TTS 朗读；带下一步动作时可选择“现在查看”或“稍后”。
+  如果明确要求“到点直接播放/打开，不要问我”，同一个动作可设置自动执行后续白名单
+  动作，例如到点自动拉起音乐或影视入口。
+  当前不支持没有明确触发时间的持续监控，例如一直盯价格或库存。
 - 模型配置在设备上输入并保存到 `EncryptedSharedPreferences`，仓库不保存
   Base URL、API Key、账号或设备数据。
 
@@ -104,5 +112,6 @@ release 构建。
 - [ADR-0001：独立全局 helper](docs/architecture/adr/0001-independent-global-helper.md)
 - [ADR-0002：模型超时兜底](docs/architecture/adr/0002-timeout-fallback-model.md)
 - [ADR-0003：定时足球直播](docs/architecture/adr/0003-scheduled-live-football.md)
+- [ADR-0004：模型选择定时动作与通用提醒](docs/architecture/adr/0004-model-selected-scheduled-actions.md)
 
 当前仓库未声明开源许可证。对外分发前需由项目所有者补充真实许可证和安全联系方式。

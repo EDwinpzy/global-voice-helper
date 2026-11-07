@@ -1,7 +1,10 @@
 # ADR-0003：定时足球直播
 
-- Status: accepted
+- Status: superseded in part by ADR-0004
 - Date: 2026-11-07
+
+> 2026-11-07 更新：主路径已改为由模型选择结构化动作；本文中的固定词解析仅保留为
+> 模型不可用时的兼容兜底。当前实现见 ADR-0004。
 
 ## Context
 

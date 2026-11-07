@@ -2,6 +2,10 @@ package com.dongpiandi.voicehelper.assistant
 
 import java.io.IOException
 import java.net.SocketTimeoutException
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -27,6 +31,8 @@ class OpenAiChatClient(
     private val attemptTimeoutsMs: List<Long> = DEFAULT_ATTEMPT_TIMEOUTS_MS,
     private val models: List<String> = DEFAULT_MODELS,
     private val timeoutFallbackModel: String = TIMEOUT_FALLBACK_MODEL,
+    private val nowProvider: () -> Long = System::currentTimeMillis,
+    private val zoneIdProvider: () -> ZoneId = ZoneId::systemDefault,
 ) {
     constructor(
         configStore: AssistantConfigStore,
@@ -78,15 +84,33 @@ class OpenAiChatClient(
                     attemptTimeoutsMs.getOrNull(index)
                         ?: attemptTimeoutsMs.lastOrNull()
                         ?: CALL_TIMEOUT_SECONDS * 1_000
+                val attemptNow = nowProvider()
+                val attemptZone = zoneIdProvider()
                 val attempt =
                     withTimeoutOrNull(timeoutMs) {
-                        executeAttempt(endpoint, config, model, userPrompt, history)
+                        executeAttempt(
+                            endpoint = endpoint,
+                            config = config,
+                            model = model,
+                            userPrompt = userPrompt,
+                            history = history,
+                            nowEpochMs = attemptNow,
+                            zone = attemptZone,
+                        )
                     }
                 if (attempt == null) {
                     timedOut = true
                     continue
                 }
-                return ChatResult(attempt.answer, model, attempt.usedWebSearch)
+                val action =
+                    AssistantActionValidator.validateAt(
+                        action = attempt.action,
+                        nowEpochMs = attemptNow,
+                    )
+                if (attempt.actionRequested && action == null) {
+                    throw RetryableChatAttemptException()
+                }
+                return ChatResult(attempt.answer, model, attempt.usedWebSearch, action)
             } catch (_: AuthenticationRejectedException) {
                 return ChatResult(SAFE_AUTH_MESSAGE, "")
             } catch (_: TimeoutChatAttemptException) {
@@ -105,77 +129,32 @@ class OpenAiChatClient(
         return ChatResult(SAFE_UNAVAILABLE_MESSAGE, "")
     }
 
-    /**
-     * Asks the configured model whether an ambiguous "播放 X" request means a video or a song.
-     * This request deliberately has no web-search tool and a very small output budget.
-     */
-    suspend fun classifyMediaIntent(userPrompt: String): MediaIntent? {
-        val transcript = userPrompt.trim().take(MEDIA_INTENT_MAX_PROMPT_CHARS)
-        if (transcript.isEmpty()) return null
-
-        val config =
-            try {
-                configProvider()
-            } catch (_: AssistantConfigurationException) {
-                return null
-            }
-        if (!AssistantConfigPolicy.isApiKeyUsable(config.apiKey)) return null
-        val endpoint =
-            try {
-                ChatEndpointPolicy.responsesUrl(config.baseUrl)
-            } catch (_: AssistantConfigurationException) {
-                return null
-            }
-
-        var timedOut = false
-        for ((index, model) in candidateModels.withIndex()) {
-            currentCoroutineContext().ensureActive()
-            if (index >= timeoutFallbackIndex && !timedOut) continue
-            try {
-                val configuredTimeout =
-                    attemptTimeoutsMs.getOrNull(index)
-                        ?: attemptTimeoutsMs.lastOrNull()
-                        ?: MEDIA_INTENT_TIMEOUT_MS
-                val timeoutMs = minOf(configuredTimeout, MEDIA_INTENT_TIMEOUT_MS)
-                val attempt =
-                    withTimeoutOrNull(timeoutMs) {
-                        executeRequest(
-                            buildMediaIntentRequest(endpoint, config, model, transcript),
-                        )
-                    }
-                if (attempt == null) {
-                    timedOut = true
-                    continue
-                }
-                return parseMediaIntentAnswer(attempt.answer)
-            } catch (_: AuthenticationRejectedException) {
-                return null
-            } catch (_: TimeoutChatAttemptException) {
-                timedOut = true
-            } catch (_: RetryableChatAttemptException) {
-                continue
-            } catch (_: NonRetryableChatAttemptException) {
-                return null
-            } catch (error: IOException) {
-                if (isTimeoutFailure(error)) timedOut = true
-                continue
-            } catch (_: JSONException) {
-                continue
-            }
-        }
-        return null
-    }
-
     private suspend fun executeAttempt(
         endpoint: String,
         config: AssistantConfig,
         model: String,
         userPrompt: String,
         history: List<ConversationTurn>,
+        nowEpochMs: Long,
+        zone: ZoneId,
     ): AttemptAnswer =
-        executeRequest(buildRequest(endpoint, config, model, userPrompt, history))
+        executeRequest(
+            buildRequest(
+                endpoint = endpoint,
+                config = config,
+                model = model,
+                userPrompt = userPrompt,
+                history = history,
+                nowEpochMs = nowEpochMs,
+                zone = zone,
+            ),
+            zone = zone,
+        )
 
-    private suspend fun executeRequest(request: Request): AttemptAnswer {
+    private suspend fun executeRequest(
+        request: Request,
+        zone: ZoneId? = null,
+    ): AttemptAnswer {
         return suspendCancellableCoroutine { continuation ->
             val call = httpClient.newCall(request)
             continuation.invokeOnCancellation { call.cancel() }
@@ -187,7 +166,7 @@ class OpenAiChatClient(
 
                     override fun onResponse(call: Call, response: Response) {
                         try {
-                            val answer = response.use(::readAnswer)
+                            val answer = response.use { readAnswer(it, zone) }
                             if (continuation.isActive) continuation.resume(answer)
                         } catch (error: IOException) {
                             continuation.resumeFailure(error)
@@ -217,11 +196,21 @@ class OpenAiChatClient(
         model: String,
         userPrompt: String,
         history: List<ConversationTurn>,
+        nowEpochMs: Long,
+        zone: ZoneId,
     ): Request {
         val payload =
             JSONObject()
                 .put("model", model)
-                .put("instructions", buildInstructions(config.systemPrompt, history))
+                .put(
+                    "instructions",
+                    buildInstructions(
+                        systemPrompt = config.systemPrompt,
+                        history = history,
+                        nowEpochMs = nowEpochMs,
+                        zone = zone,
+                    ),
+                )
                 .put("input", buildInput(userPrompt))
                 .put("tools", buildWebSearchTools())
                 .put("tool_choice", "auto")
@@ -244,37 +233,11 @@ class OpenAiChatClient(
             .build()
     }
 
-    private fun buildMediaIntentRequest(
-        endpoint: String,
-        config: AssistantConfig,
-        model: String,
-        transcript: String,
-    ): Request {
-        val payload =
-            JSONObject()
-                .put("model", model)
-                .put("instructions", MEDIA_INTENT_INSTRUCTIONS)
-                .put("input", buildInput("用户原话：$transcript"))
-                .put("store", false)
-                .put("stream", false)
-                .put("max_output_tokens", MEDIA_INTENT_MAX_OUTPUT_TOKENS)
-                .toString()
-        return Request.Builder()
-            .url(endpoint)
-            .header("Accept", "application/json")
-            .apply {
-                val apiKey = config.apiKey.trim()
-                if (apiKey.isNotEmpty()) {
-                    header("Authorization", "Bearer $apiKey")
-                }
-            }
-            .post(payload.toRequestBody(JSON_MEDIA_TYPE))
-            .build()
-    }
-
     private fun buildInstructions(
         systemPrompt: String?,
         history: List<ConversationTurn>,
+        nowEpochMs: Long,
+        zone: ZoneId,
     ): String {
         val configuredPrompt = systemPrompt?.trim().orEmpty()
         val base =
@@ -283,13 +246,26 @@ class OpenAiChatClient(
             } else {
                 "$configuredPrompt\n\n$DEFAULT_INSTRUCTIONS"
             }
-        if (history.isEmpty()) return base
+        val currentTime = Instant.ofEpochMilli(nowEpochMs).atZone(zone)
+        val readableTime =
+            currentTime.format(
+                DateTimeFormatter.ofPattern("yyyy年M月d日 EEEE HH:mm", Locale.CHINA),
+            )
+        val isoTime = currentTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        val currentTimeBlock =
+            """
+            当前时间：$readableTime
+            当前时间的 RFC 3339 表示：$isoTime
+            系统时区：${zone.id}（UTC${currentTime.offset.id}）
+            """.trimIndent()
+        val withContext = "$currentTimeBlock\n\n$base\n\n$ACTION_INSTRUCTIONS"
+        if (history.isEmpty()) return withContext
 
         val recent =
             history.joinToString("\n") { turn ->
                 "用户：${turn.user}\n助手：${turn.assistant}"
             }
-        return "$base\n\n以下是之前的对话，仅用于理解指代和追问，不要重复回答。" +
+        return "$withContext\n\n以下是之前的对话，仅用于理解指代和追问，不要重复回答。" +
             "本轮问题在 input 中：\n$recent"
     }
 
@@ -355,10 +331,33 @@ class OpenAiChatClient(
         return lines.joinToString("\n").trim()
     }
 
-    private fun parseAnswerText(raw: String): String {
-        return normalizeAnswer(raw)
-            .takeIf(String::isNotEmpty)
-            ?: throw RetryableChatAttemptException()
+    private fun parseAnswerText(
+        raw: String,
+        usedWebSearch: Boolean,
+        zone: ZoneId?,
+    ): AttemptAnswer {
+        val envelope = zone?.let { AssistantActionJson.parseEnvelope(raw, it) }
+        if (envelope != null) {
+            val normalized = normalizeAnswer(envelope.answer)
+            if (normalized.isEmpty()) throw RetryableChatAttemptException()
+            return AttemptAnswer(
+                answer = normalized,
+                usedWebSearch = usedWebSearch,
+                actionRequested = envelope.actionRequested,
+                action = envelope.action,
+            )
+        }
+
+        val normalized =
+            normalizeAnswer(raw)
+                .takeIf(String::isNotEmpty)
+                ?: throw RetryableChatAttemptException()
+        return AttemptAnswer(
+            answer = normalized,
+            usedWebSearch = usedWebSearch,
+            actionRequested = false,
+            action = null,
+        )
     }
 
     private fun buildInput(userPrompt: String): JSONArray =
@@ -383,7 +382,10 @@ class OpenAiChatClient(
                 .put("search_context_size", SEARCH_CONTEXT_SIZE),
         )
 
-    private fun readAnswer(response: Response): AttemptAnswer {
+    private fun readAnswer(
+        response: Response,
+        zone: ZoneId?,
+    ): AttemptAnswer {
         when {
             response.code == 401 || response.code == 403 ->
                 throw AuthenticationRejectedException()
@@ -394,10 +396,13 @@ class OpenAiChatClient(
         }
         val body = response.body?.string().orEmpty()
         if (body.isBlank()) throw RetryableChatAttemptException()
-        return parseAnswer(body)
+        return parseAnswer(body, zone)
     }
 
-    private fun parseAnswer(body: String): AttemptAnswer {
+    private fun parseAnswer(
+        body: String,
+        zone: ZoneId?,
+    ): AttemptAnswer {
         val root =
             try {
                 JSONObject(body)
@@ -418,12 +423,14 @@ class OpenAiChatClient(
             }
         }
 
-        val text = normalizeAnswer(answer.toString())
-        if (text.isNotEmpty()) return AttemptAnswer(text, usedWebSearch)
+        val rawText =
+            answer.toString().ifBlank {
+                root.optString("output_text")
+            }
+        if (rawText.isNotBlank()) {
+            return parseAnswerText(rawText, usedWebSearch, zone)
+        }
 
-        root.optString("output_text")
-            .takeIf(String::isNotBlank)
-            ?.let { return AttemptAnswer(parseAnswerText(it), usedWebSearch) }
         throw RetryableChatAttemptException()
     }
 
@@ -490,9 +497,6 @@ class OpenAiChatClient(
         const val SEARCH_CONTEXT_SIZE = "medium"
         const val MAX_ANSWER_CHARS = 300
         const val MIN_TRUNCATE_CHARS = 120
-        const val MEDIA_INTENT_MAX_OUTPUT_TOKENS = 32
-        const val MEDIA_INTENT_TIMEOUT_MS = 15_000L
-        const val MEDIA_INTENT_MAX_PROMPT_CHARS = 200
 
         const val SAFE_EMPTY_PROMPT_MESSAGE = "没有识别到要询问的内容。"
         const val SAFE_CONFIGURATION_MESSAGE = "语音助手尚未配置完整。"
@@ -533,15 +537,43 @@ class OpenAiChatClient(
             如果只选一部，选《机器人总动员》。
             """.trimIndent()
 
-        private val MEDIA_INTENT_INSTRUCTIONS =
+        private val ACTION_INSTRUCTIONS =
             """
-            你是电视应用的点播类型分类器。判断用户说的“播放/放/我想播放”对象是视频、音乐，还是体育直播。
-            只输出一个词：VIDEO、MUSIC、LIVE 或 UNKNOWN。
-            歌曲、歌名、歌手、专辑、音乐相关对象输出 MUSIC。
-            电影、电视剧、动漫、综艺、短剧、视频相关对象输出 VIDEO。
-            足球、球赛、英超、欧冠、世界杯等体育比赛、直播或看球相关对象输出 LIVE。
-            看不出对象是哪一种时输出 UNKNOWN。
-            不要解释，不要标点，不要输出其他文字。
+            你可以根据用户意图选择一个设备动作，但只能用下面列出的动作。普通问答仍然直接返回纯文本，不要返回 JSON。
+            只有用户确实要你现在操作设备，或要你在未来某个确定时刻提醒、询问或执行时，才只输出一个 JSON 对象，不要加代码块或解释。
+
+            JSON 外层格式：
+            {"answer":"给用户看和朗读的简短回答","action":{"type":"动作类型","其他字段":"..."}}
+
+            动作类型和字段：
+            1. OPEN_LIVE_FOOTBALL：现在打开足球直播。query 可选，填球队、赛事或比赛名称。
+            2. OPEN_VIDEO_SEARCH：现在在视频应用搜索影视内容。query 必填；openFirstResult=true 表示直接尝试打开第一条结果，false 表示停在搜索结果。
+            3. OPEN_MUSIC：现在在音乐应用播放歌曲。query 必填。
+            4. SCHEDULE_LIVE_FOOTBALL：到未来开赛时间自动打开足球直播。query 必填，kickoffAt 必填，displayName 可选。
+            5. SCHEDULE_REMINDER：在未来某个时间提醒用户，并可让用户当场确认下一步；也支持到点直接执行白名单动作。triggerAt、title、message 必填；confirmLabel 可选；followUp 可选；autoRunFollowUp 可选。
+               followUp 只能是 OPEN_LIVE_FOOTBALL、OPEN_VIDEO_SEARCH 或 OPEN_MUSIC，格式与上面的动作相同。
+
+            时间和执行规则：
+            1. kickoffAt 和 triggerAt 必须使用带时区的 RFC 3339 时间，例如 2026-11-08T03:00:00+08:00，不能写“今晚”“开赛后”等相对文本。
+            2. 所有时间以本轮给出的当前时间和系统时区为基准。不要把已经过去的时刻安排成未来提醒；如果事情已经开始且用户要马上看，选择立即动作。
+            3. 电影上线、节目更新、比赛开赛等时间可能变化。依赖这些信息时必须先使用 web_search 核实。没有可靠未来时间就不要编造，改用普通纯文本说明缺少什么并询问用户。
+            4. 对于电影上线这类用户要求“到点提醒并问是否要看”的场景，选择 SCHEDULE_REMINDER，message 写成到时要问用户的问题，followUp 填确认后要执行的立即动作。
+            5. 只有用户明确要求“到点直接播放/打开，不要问我”时，才设置 autoRunFollowUp=true，并必须提供 followUp；到点直接执行该动作，不再询问。仅说“提醒我看看”时保持 false，仍生成提醒和确认按钮。
+            6. 如果只有日期没有可靠时刻，而用户明确希望当天提醒，可以按当天 09:00 系统本地时间安排，并在 answer 里说明这是按当天上午提醒。
+            7. 一场比赛只有一个开赛时刻。用户说“比赛开始时打开直播”表示未来执行，不要当成现在打开。
+            8. 如果题干有歧义、上一轮回答里有多个候选且用户没有指明，只返回普通纯文本请用户补充，不要猜一个动作执行。
+
+            定时提醒示例：
+            用户：等《示例电影》上线时提醒我，并问我要不要马上看。
+            助手：{"answer":"已按核实到的 12 月 31 日设置当天上午 09:00 提醒，到时我会问你是否现在查找观看。","action":{"type":"SCHEDULE_REMINDER","triggerAt":"2026-12-31T09:00:00+08:00","title":"《示例电影》上线提醒","message":"《示例电影》今天上线，要现在查找观看吗？","confirmLabel":"现在查找","followUp":{"type":"OPEN_VIDEO_SEARCH","query":"示例电影","openFirstResult":false}}}
+
+            到时自动执行示例：
+            用户：明晚八点直接播放周杰伦的晴天，不要再问我。
+            助手：{"answer":"已安排明晚八点自动播放《晴天》。","action":{"type":"SCHEDULE_REMINDER","triggerAt":"2026-11-08T20:00:00+08:00","title":"播放《晴天》","message":"到点自动播放音乐。","autoRunFollowUp":true,"followUp":{"type":"OPEN_MUSIC","query":"周杰伦 晴天"}}}
+
+            立即动作示例：
+            用户：现在打开阿森纳直播。
+            助手：{"answer":"正在打开阿森纳直播。","action":{"type":"OPEN_LIVE_FOOTBALL","query":"阿森纳"}}
             """.trimIndent()
 
         private val ANSWER_BOUNDARIES = charArrayOf('。', '！', '？', '；', '\n')
@@ -566,4 +598,6 @@ private class NonRetryableChatAttemptException : Exception()
 private data class AttemptAnswer(
     val answer: String,
     val usedWebSearch: Boolean,
+    val actionRequested: Boolean,
+    val action: AssistantAction?,
 )

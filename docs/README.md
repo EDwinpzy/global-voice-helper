@@ -16,6 +16,8 @@
    只在超时时切换到 `group/free`。
 7. [ADR-0003](architecture/adr/0003-scheduled-live-football.md)：为什么用
    `AlarmManager` 和透明启动页实现定时足球直播。
+8. [ADR-0004：模型选择定时动作与通用提醒](architecture/adr/0004-model-selected-scheduled-actions.md)：
+    为什么改为模型理解意图，以及到点提醒如何询问下一步动作。
 
 ## 文档职责
 

@@ -2,6 +2,11 @@ package com.dongpiandi.voicehelper
 
 import java.util.Locale
 
+internal data class VideoSearchRequest(
+    val query: String,
+    val openFirstResult: Boolean,
+)
+
 /**
  * Extracts an explicit video search request from an assistant transcript.
  *
@@ -15,27 +20,28 @@ internal object VideoSearchCommandParser {
     private data class CommandPrefix(
         val text: String,
         val requiresMediaNoun: Boolean,
+        val openFirstResult: Boolean,
     )
 
     private val commandPrefixes =
         listOf(
-            CommandPrefix("我想看一下", false),
-            CommandPrefix("我要看一下", false),
-            CommandPrefix("帮我看一下", false),
-            CommandPrefix("给我看一下", false),
-            CommandPrefix("帮我搜索", true),
-            CommandPrefix("帮我搜", true),
-            CommandPrefix("帮我找", true),
-            CommandPrefix("搜索一下", true),
-            CommandPrefix("搜一下", true),
-            CommandPrefix("打开", true),
-            CommandPrefix("我想看", false),
-            CommandPrefix("我要看", false),
-            CommandPrefix("帮我看", false),
-            CommandPrefix("给我看", false),
-            CommandPrefix("播放", false),
-            CommandPrefix("搜索", true),
-            CommandPrefix("找一下", true),
+            CommandPrefix("我想看一下", false, true),
+            CommandPrefix("我要看一下", false, true),
+            CommandPrefix("帮我看一下", false, true),
+            CommandPrefix("给我看一下", false, true),
+            CommandPrefix("帮我搜索", true, false),
+            CommandPrefix("帮我搜", true, false),
+            CommandPrefix("帮我找", true, false),
+            CommandPrefix("搜索一下", true, false),
+            CommandPrefix("搜一下", true, false),
+            CommandPrefix("打开", true, true),
+            CommandPrefix("我想看", false, true),
+            CommandPrefix("我要看", false, true),
+            CommandPrefix("帮我看", false, true),
+            CommandPrefix("给我看", false, true),
+            CommandPrefix("播放", false, true),
+            CommandPrefix("搜索", true, false),
+            CommandPrefix("找一下", true, false),
         ).sortedByDescending { it.text.length }
 
     private val mediaNouns = listOf("电影", "影片", "视频", "电视剧", "动漫", "综艺", "短剧", "片子")
@@ -74,7 +80,7 @@ internal object VideoSearchCommandParser {
             """(?:[。！？!?，,、；;：:…~～\s]+|(?:这部|那部|这个|那个)?(?:电影|影片|视频|电视剧|动漫|综艺|短剧|片子)|吧|啊|呀|呗|呢|啦|嘛|可以吗|好吗|行吗|好不好|谢谢|拜托)+$""",
         )
 
-    fun parse(transcript: String): String? {
+    fun parse(transcript: String): VideoSearchRequest? {
         val input = transcript.trim().replace(Regex("\\s+"), " ")
         if (input.length < 3) return null
 
@@ -94,7 +100,7 @@ internal object VideoSearchCommandParser {
 
         if (title.length !in MIN_TITLE_LENGTH..MAX_TITLE_LENGTH) return null
         if (title.lowercase(Locale.ROOT) in blockedTitles) return null
-        return title
+        return VideoSearchRequest(title, command.openFirstResult)
     }
 
     private fun stripTitleEdges(value: String): String =

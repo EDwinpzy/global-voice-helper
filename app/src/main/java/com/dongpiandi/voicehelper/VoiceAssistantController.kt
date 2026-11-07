@@ -340,8 +340,8 @@ internal class VoiceAssistantController(
             classifyAmbiguousMedia(transcript, token)
             return
         }
-        VideoSearchCommandParser.parse(transcript)?.let { query ->
-            launchVideo(token, query)
+        VideoSearchCommandParser.parse(transcript)?.let { request ->
+            launchVideo(token, request)
             return
         }
         answerJob?.cancel()
@@ -414,11 +414,11 @@ internal class VoiceAssistantController(
                         }
                     }
                     MediaIntent.VIDEO -> {
-                        val query = VideoSearchCommandParser.parse(transcript)
-                        if (query == null) {
+                        val request = VideoSearchCommandParser.parse(transcript)
+                        if (request == null) {
                             showFailure(token, context.getString(R.string.assistant_media_intent_unknown))
                         } else {
-                            launchVideo(token, query)
+                            launchVideo(token, request)
                         }
                     }
                     MediaIntent.LIVE ->
@@ -447,12 +447,16 @@ internal class VoiceAssistantController(
 
     private fun launchVideo(
         token: Int,
-        query: String,
+        request: VideoSearchRequest,
     ) {
         if (!isCurrent(token)) return
-        if (VideoSearchLauncher.open(context, query)) {
+        if (VideoSearchLauncher.open(context, request.query, request.openFirstResult)) {
             finishExternalLaunch()
-            Log.i(TAG, "video-search launched chars=${query.length}")
+            Log.i(
+                TAG,
+                "video-search launched chars=${request.query.length} " +
+                    "openFirst=${request.openFirstResult}",
+            )
         } else {
             showFailure(token, context.getString(R.string.assistant_video_pro_unavailable))
         }

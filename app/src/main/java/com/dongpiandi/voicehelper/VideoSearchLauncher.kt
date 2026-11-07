@@ -12,12 +12,14 @@ internal object VideoSearchLauncher {
     private const val VOICE_SEARCH_ACTIVITY = "com.qiubo.optimaltv.voice.VoiceSearchActivity"
     private const val ACTION_OPEN_SEARCH = "com.dongpiandi.videopro.action.OPEN_SEARCH"
     private const val EXTRA_QUERY = "query"
+    private const val EXTRA_OPEN_FIRST_RESULT = "openFirstResult"
     private const val MAX_QUERY_LENGTH = 80
     private const val TAG = "VoiceHelperVideoSearch"
 
     fun open(
         context: Context,
         query: String,
+        openFirstResult: Boolean,
     ): Boolean {
         val normalized = query.trim().take(MAX_QUERY_LENGTH)
         if (normalized.isEmpty()) return false
@@ -26,6 +28,7 @@ internal object VideoSearchLauncher {
             Intent(ACTION_OPEN_SEARCH)
                 .setComponent(ComponentName(VIDEO_PRO_PACKAGE, VOICE_SEARCH_ACTIVITY))
                 .putExtra(EXTRA_QUERY, normalized)
+                .putExtra(EXTRA_OPEN_FIRST_RESULT, openFirstResult)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
         return try {

@@ -29,6 +29,9 @@ GitHub 私有仓库：<https://github.com/EDwinpzy/global-voice-helper>
 - 明确的“播放/打开/我要看”命令会请求 Video Pro 自动打开首条搜索结果；
   “搜索/帮我找”类命令停留在搜索结果页。目标 Activity 由 signature 权限保护，
   Intent 契约见 [Video Pro TV README](https://github.com/EDwinpzy/video-pro/blob/main/frontend-tv/README.md#voice-search-intent)。
+- 问完今晚足球赛程后，可以说“阿森纳比赛开始时帮我打开直播”。助手会从上一轮回答
+  提取球队和开赛时间，使用系统闹钟跨应用定时；到点由球迹直播应用打开对应比赛。
+  精确定时需要系统“闹钟和提醒”权限，未授权时会降级为近似时间并明确提示。
 - 模型配置在设备上输入并保存到 `EncryptedSharedPreferences`，仓库不保存
   Base URL、API Key、账号或设备数据。
 
@@ -100,5 +103,6 @@ release 构建。
 - [2026-11-05 模型延迟结果](docs/reference/model-benchmark-2026-11-05.md)
 - [ADR-0001：独立全局 helper](docs/architecture/adr/0001-independent-global-helper.md)
 - [ADR-0002：模型超时兜底](docs/architecture/adr/0002-timeout-fallback-model.md)
+- [ADR-0003：定时足球直播](docs/architecture/adr/0003-scheduled-live-football.md)
 
 当前仓库未声明开源许可证。对外分发前需由项目所有者补充真实许可证和安全联系方式。

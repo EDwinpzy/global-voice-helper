@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.util.Log
 
 /** Opens the installed QiuJi app and asks it to start a named live match when available. */
@@ -36,4 +37,15 @@ internal object LiveFootballLauncher {
             false
         }
     }
+
+    fun isInstalled(context: Context): Boolean =
+        try {
+            context.packageManager.getPackageInfo(
+                LIVE_PACKAGE,
+                PackageManager.PackageInfoFlags.of(0),
+            )
+            true
+        } catch (_: Exception) {
+            false
+        }
 }

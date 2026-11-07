@@ -49,6 +49,9 @@ class VoiceHelperSetupActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        runCatching {
+            ScheduledLiveFootballScheduler.rescheduleAll(this)
+        }
         refreshStatus()
     }
 
@@ -216,6 +219,10 @@ class VoiceHelperSetupActivity : Activity() {
             actionParams(),
         )
         actionRow2.addView(
+            action("精确定时") { requestExactAlarmAccess() },
+            actionParams(),
+        )
+        actionRow2.addView(
             action("返回") { finish() },
             actionParams(),
         )
@@ -287,6 +294,18 @@ class VoiceHelperSetupActivity : Activity() {
         }
     }
 
+    private fun requestExactAlarmAccess() {
+        if (ScheduledLiveFootballScheduler.canScheduleExactAlarms(this)) {
+            Toast.makeText(this, "精确定时权限已允许", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (ScheduledLiveFootballScheduler.openExactAlarmSettings(this)) {
+            Toast.makeText(this, "请在系统设置中允许精确定时", Toast.LENGTH_LONG).show()
+        } else {
+            Toast.makeText(this, "无法打开精确定时设置", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun refreshStatus() {
         if (!::statusView.isInitialized) return
         val microphoneGranted =
@@ -300,6 +319,7 @@ class VoiceHelperSetupActivity : Activity() {
             } catch (_: Exception) {
                 false
             }
+        val exactAlarmReady = ScheduledLiveFootballScheduler.canScheduleExactAlarms(this)
         statusView.text =
             buildString {
                 append(statusLine("麦克风", microphoneGranted))
@@ -309,6 +329,8 @@ class VoiceHelperSetupActivity : Activity() {
                 append(statusLine("原厂识别与 TTS", vendorReady))
                 append('\n')
                 append(statusLine("大模型配置", configured))
+                append('\n')
+                append(statusLine("精确定时", exactAlarmReady))
             }
         conflictView.text =
             when {

@@ -12,3 +12,17 @@ local.properties
 *.keystore
 .env
 .env.*
+*.pcm
+*.wav
+*.m4a
+*.aac
+*.mp3
+*.db
+*.sqlite
+*.sqlite3
+*.png
+*.jpg
+*.jpeg
+*.webp
+screenshots/
+captures/

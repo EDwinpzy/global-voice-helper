@@ -173,9 +173,10 @@ class VoiceHelperSetupActivity : Activity() {
         column.addView(
             text(
                 value =
-                    "模型固定为 workbuddy/deepseek-v4.1-flash；" +
+                    "默认模型为 workbuddy/deepseek-v4.1-flash，" +
+                        "仅超时时使用 group/free 兜底；" +
                         "请求使用 Responses API 并启用 " +
-                        "单次 web_search，密钥不会写入安装包或日志。",
+                        "最多两次 web_search，密钥不会写入安装包或日志。",
                 size = 16f,
                 color = Color.argb(135, 255, 255, 255),
             ).apply {

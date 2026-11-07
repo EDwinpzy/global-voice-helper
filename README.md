@@ -20,7 +20,9 @@ GitHub 私有仓库：<https://github.com/EDwinpzy/global-voice-helper>
   麦克风圆钮切换为持续起伏的动态声波，识别文本以大字号单行显示。
 - 动效包括语音岛入场、麦克风呼吸、动态声波、文字淡入、回答展开与退出淡出；
   不显示“正在思考”文案，回答静止或关闭后停止持续重绘，并遵循系统动画开关。
-- 模型固定为 `workbuddy/deepseek-v4.1-flash`，单次请求最多等待 30 秒。
+- 默认模型为 `workbuddy/deepseek-v4.1-flash`，单次请求最多等待 30 秒；仅当默认模型
+  请求超时时，自动用 `group/free` 兜底一次，兜底请求同样最多等待 30 秒；认证失败和
+  其他非超时错误不触发兜底。
 - 无输入框助手会带上最近两轮对话；普通问题使用中等搜索上下文，最多搜索两次；
   回答按“结论 + 关键点 + 建议”组织；每个完整句子单独成行，多项内容使用
   阿拉伯数字编号并留出间距，且限制在覆盖层可完整显示的长度内。
@@ -97,5 +99,6 @@ release 构建。
 - [在现有 App 内测试模型延迟](docs/how-to/benchmark-models.md)
 - [2026-11-05 模型延迟结果](docs/reference/model-benchmark-2026-11-05.md)
 - [ADR-0001：独立全局 helper](docs/architecture/adr/0001-independent-global-helper.md)
+- [ADR-0002：模型超时兜底](docs/architecture/adr/0002-timeout-fallback-model.md)
 
 当前仓库未声明开源许可证。对外分发前需由项目所有者补充真实许可证和安全联系方式。

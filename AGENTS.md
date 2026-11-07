@@ -1,3 +1,27 @@
+## Agent Quick Card
+
+- **Official source entry:** `settings.gradle` → `:app`; `app/` is the Android app and
+  `voice-core/` is its library. Both belong to the same release APK.
+- **Build:** `.\gradlew.bat :app:assembleDebug`
+- **Test:** `.\gradlew.bat :voice-core:testDebugUnitTest :app:testDebugUnitTest`
+- **Static check:** `.\gradlew.bat :voice-core:lintDebug :app:lintDebug`
+- **Generated / ignored:** `.gradle/`, `.kotlin/`, `**/build/`, `**/.cxx/`,
+  `local.properties`, `*.apk`, `*.aab`, `*.jks`, `*.keystore`, `.env`, `.env.*`,
+  captured audio, screenshots and local data files
+- **Release / signing gate:** Manual only; preserve `com.dongpiandi.voicehelper` and the
+  signing identity, use replacement installs, never uninstall to bypass signature mismatch.
+- **Do not modify:** `main` directly (use `codex/<topic>` branches), generated outputs,
+  signing material, `local.properties`, device credentials.
+
+## Project boundaries
+
+- **Official product:** `app/` (`:app`) with `voice-core/` (`:voice-core`) as the only
+  Android release product.
+- **Experimental / legacy / verification entries:** `app/src/debug/` and
+  `app/src/testDebug/` are debug-only QA/benchmark sources, not a separate release entry.
+- **Multi-stack boundary:** Android-only Gradle project; `app/` and `voice-core/` are
+  compiled into the same APK.
+
 # Repository Instructions
 
 - Use PowerShell on Windows.

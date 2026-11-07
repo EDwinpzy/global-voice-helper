@@ -10,7 +10,9 @@
 3. [模型延迟基准](how-to/benchmark-models.md)：在现有 App 内重复测试模型速度。
 4. [2026-11-05 模型延迟结果](reference/model-benchmark-2026-11-05.md)：本轮实机
    测试数据与选型结论。
-5. [ADR-0001](architecture/adr/0001-independent-global-helper.md)：为什么采用独立
+5. [ADR-0002：模型超时兜底](architecture/adr/0002-timeout-fallback-model.md)：为什么
+   只在超时时切换到 `group/free`。
+6. [ADR-0001](architecture/adr/0001-independent-global-helper.md)：为什么采用独立
    helper，而不是绑定单个业务 App 或修改固件。
 
 ## 文档职责

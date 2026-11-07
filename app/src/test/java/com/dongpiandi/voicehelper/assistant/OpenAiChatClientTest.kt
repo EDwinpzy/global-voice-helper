@@ -59,6 +59,11 @@ class OpenAiChatClientTest {
             listOf("workbuddy/deepseek-v4.1-flash"),
             OpenAiChatClient.DEFAULT_MODELS,
         )
+        assertEquals("group/free", OpenAiChatClient.TIMEOUT_FALLBACK_MODEL)
+        assertEquals(
+            listOf(30_000L, 30_000L),
+            OpenAiChatClient.DEFAULT_ATTEMPT_TIMEOUTS_MS,
+        )
         assertEquals(1, server.requestCount)
 
         val request = requireRequest()
@@ -285,6 +290,66 @@ class OpenAiChatClientTest {
         assertEquals(2, attempts.get())
         assertEquals(1, server.requestCount)
         assertFalse(result.answer.contains("private timeout detail"))
+    }
+
+    @Test
+    fun coroutineTimeoutUsesTheFreeFallbackModel() = runBlocking {
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE))
+        server.enqueue(successResponse("\"timeout fallback\""))
+
+        val result =
+            newClient(
+                attemptTimeoutsMs = listOf(150L, 2_000L),
+                models = listOf("test-primary"),
+            ).complete("question")
+
+        assertEquals("timeout fallback", result.answer)
+        assertEquals(OpenAiChatClient.TIMEOUT_FALLBACK_MODEL, result.model)
+        assertEquals(2, server.requestCount)
+        val first = checkNotNull(server.takeRequest(2, TimeUnit.SECONDS))
+        val fallback = checkNotNull(server.takeRequest(2, TimeUnit.SECONDS))
+        assertEquals("test-primary", JSONObject(first.body.readUtf8()).getString("model"))
+        assertEquals(
+            OpenAiChatClient.TIMEOUT_FALLBACK_MODEL,
+            JSONObject(fallback.body.readUtf8()).getString("model"),
+        )
+    }
+
+    @Test
+    fun httpTimeoutStatusUsesTheFreeFallbackModel() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(504).setBody("private timeout detail"))
+        server.enqueue(successResponse("\"timeout fallback\""))
+
+        val result =
+            newClient(models = listOf("test-primary"))
+                .complete("question")
+
+        assertEquals("timeout fallback", result.answer)
+        assertEquals(OpenAiChatClient.TIMEOUT_FALLBACK_MODEL, result.model)
+        assertEquals(2, server.requestCount)
+        val first = checkNotNull(server.takeRequest(2, TimeUnit.SECONDS))
+        val fallback = checkNotNull(server.takeRequest(2, TimeUnit.SECONDS))
+        assertEquals("test-primary", JSONObject(first.body.readUtf8()).getString("model"))
+        assertEquals(
+            OpenAiChatClient.TIMEOUT_FALLBACK_MODEL,
+            JSONObject(fallback.body.readUtf8()).getString("model"),
+        )
+        assertFalse(result.answer.contains("private timeout detail"))
+    }
+
+    @Test
+    fun nonTimeoutRetryableFailureDoesNotUseTheFreeFallbackModel() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(500).setBody("private error"))
+        server.enqueue(successResponse("\"must not run\""))
+
+        val result =
+            newClient(models = listOf("test-primary"))
+                .complete("question")
+
+        assertEquals(OpenAiChatClient.SAFE_UNAVAILABLE_MESSAGE, result.answer)
+        assertEquals("", result.model)
+        assertEquals(1, server.requestCount)
+        assertFalse(result.answer.contains("private error"))
     }
 
     @Test
@@ -608,6 +673,38 @@ class OpenAiChatClientTest {
         assertNull(client.classifyMediaIntent("播放那个"))
     }
 
+    @Test
+    fun classifyMediaIntentTimeoutUsesTheFreeFallbackModel() = runBlocking {
+        val attempts = AtomicInteger()
+        val timeout =
+            Interceptor { chain ->
+                if (attempts.incrementAndGet() == 1) {
+                    throw SocketTimeoutException("private timeout detail")
+                }
+                chain.proceed(chain.request())
+            }
+        val httpClient =
+            OkHttpClient.Builder()
+                .addInterceptor(timeout)
+                .retryOnConnectionFailure(false)
+                .build()
+        server.enqueue(plainAnswerResponse("MUSIC"))
+
+        val result =
+            newClient(
+                httpClient = httpClient,
+                models = listOf("test-primary"),
+            ).classifyMediaIntent("播放晴天")
+
+        assertEquals(MediaIntent.MUSIC, result)
+        assertEquals(2, attempts.get())
+        assertEquals(1, server.requestCount)
+        assertEquals(
+            OpenAiChatClient.TIMEOUT_FALLBACK_MODEL,
+            JSONObject(requireRequest().body.readUtf8()).getString("model"),
+        )
+    }
+
     private fun newClient(
         config: AssistantConfig = config(),
         httpClient: OkHttpClient =
@@ -616,12 +713,14 @@ class OpenAiChatClientTest {
                 .build(),
         attemptTimeoutsMs: List<Long> = OpenAiChatClient.DEFAULT_ATTEMPT_TIMEOUTS_MS,
         models: List<String> = OpenAiChatClient.DEFAULT_MODELS,
+        timeoutFallbackModel: String = OpenAiChatClient.TIMEOUT_FALLBACK_MODEL,
     ): OpenAiChatClient =
         OpenAiChatClient(
             configProvider = { config },
             httpClient = httpClient,
             attemptTimeoutsMs = attemptTimeoutsMs,
             models = models,
+            timeoutFallbackModel = timeoutFallbackModel,
         )
 
     private fun config(

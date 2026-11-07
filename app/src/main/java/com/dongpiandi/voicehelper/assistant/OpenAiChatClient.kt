@@ -1,6 +1,7 @@
 package com.dongpiandi.voicehelper.assistant
 
 import java.io.IOException
+import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -25,6 +26,7 @@ class OpenAiChatClient(
     httpClient: OkHttpClient = OkHttpClient(),
     private val attemptTimeoutsMs: List<Long> = DEFAULT_ATTEMPT_TIMEOUTS_MS,
     private val models: List<String> = DEFAULT_MODELS,
+    private val timeoutFallbackModel: String = TIMEOUT_FALLBACK_MODEL,
 ) {
     constructor(
         configStore: AssistantConfigStore,
@@ -37,6 +39,11 @@ class OpenAiChatClient(
             .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .callTimeout(CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .build()
+
+    private val timeoutFallbackModels =
+        if (timeoutFallbackModel.isBlank()) emptyList() else listOf(timeoutFallbackModel)
+    private val candidateModels = models + timeoutFallbackModels
+    private val timeoutFallbackIndex = models.size
 
     suspend fun complete(
         userPrompt: String,
@@ -62,8 +69,10 @@ class OpenAiChatClient(
                 return ChatResult(SAFE_CONFIGURATION_MESSAGE, "")
             }
 
-        for ((index, model) in models.withIndex()) {
+        var timedOut = false
+        for ((index, model) in candidateModels.withIndex()) {
             currentCoroutineContext().ensureActive()
+            if (index >= timeoutFallbackIndex && !timedOut) continue
             try {
                 val timeoutMs =
                     attemptTimeoutsMs.getOrNull(index)
@@ -72,15 +81,22 @@ class OpenAiChatClient(
                 val attempt =
                     withTimeoutOrNull(timeoutMs) {
                         executeAttempt(endpoint, config, model, userPrompt, history)
-                    } ?: continue
+                    }
+                if (attempt == null) {
+                    timedOut = true
+                    continue
+                }
                 return ChatResult(attempt.answer, model, attempt.usedWebSearch)
             } catch (_: AuthenticationRejectedException) {
                 return ChatResult(SAFE_AUTH_MESSAGE, "")
+            } catch (_: TimeoutChatAttemptException) {
+                timedOut = true
             } catch (_: RetryableChatAttemptException) {
                 continue
             } catch (_: NonRetryableChatAttemptException) {
                 return ChatResult(SAFE_UNAVAILABLE_MESSAGE, "")
-            } catch (_: IOException) {
+            } catch (error: IOException) {
+                if (isTimeoutFailure(error)) timedOut = true
                 continue
             } catch (_: JSONException) {
                 continue
@@ -111,8 +127,10 @@ class OpenAiChatClient(
                 return null
             }
 
-        for ((index, model) in models.withIndex()) {
+        var timedOut = false
+        for ((index, model) in candidateModels.withIndex()) {
             currentCoroutineContext().ensureActive()
+            if (index >= timeoutFallbackIndex && !timedOut) continue
             try {
                 val configuredTimeout =
                     attemptTimeoutsMs.getOrNull(index)
@@ -124,15 +142,22 @@ class OpenAiChatClient(
                         executeRequest(
                             buildMediaIntentRequest(endpoint, config, model, transcript),
                         )
-                    } ?: continue
+                    }
+                if (attempt == null) {
+                    timedOut = true
+                    continue
+                }
                 return parseMediaIntentAnswer(attempt.answer)
             } catch (_: AuthenticationRejectedException) {
                 return null
+            } catch (_: TimeoutChatAttemptException) {
+                timedOut = true
             } catch (_: RetryableChatAttemptException) {
                 continue
             } catch (_: NonRetryableChatAttemptException) {
                 return null
-            } catch (_: IOException) {
+            } catch (error: IOException) {
+                if (isTimeoutFailure(error)) timedOut = true
                 continue
             } catch (_: JSONException) {
                 continue
@@ -167,6 +192,8 @@ class OpenAiChatClient(
                         } catch (error: IOException) {
                             continuation.resumeFailure(error)
                         } catch (error: AuthenticationRejectedException) {
+                            continuation.resumeFailure(error)
+                        } catch (error: TimeoutChatAttemptException) {
                             continuation.resumeFailure(error)
                         } catch (error: RetryableChatAttemptException) {
                             continuation.resumeFailure(error)
@@ -360,6 +387,8 @@ class OpenAiChatClient(
         when {
             response.code == 401 || response.code == 403 ->
                 throw AuthenticationRejectedException()
+            response.code == 408 || response.code == 504 ->
+                throw TimeoutChatAttemptException()
             isFallbackStatus(response.code) -> throw RetryableChatAttemptException()
             !response.isSuccessful -> throw NonRetryableChatAttemptException()
         }
@@ -435,6 +464,11 @@ class OpenAiChatClient(
             status == 429 ||
             status in 500..599
 
+    private fun isTimeoutFailure(error: IOException): Boolean =
+        error is SocketTimeoutException ||
+            error.javaClass.simpleName.contains("Timeout", ignoreCase = true) ||
+            error.message?.contains("timeout", ignoreCase = true) == true
+
     private fun CancellableContinuation<AttemptAnswer>.resumeFailure(error: Throwable) {
         if (isActive) resumeWithException(error)
     }
@@ -446,10 +480,11 @@ class OpenAiChatClient(
                 "workbuddy/deepseek-v4.1-flash",
             )
 
+        const val TIMEOUT_FALLBACK_MODEL = "group/free"
         const val CONNECT_TIMEOUT_SECONDS = 8L
         const val READ_TIMEOUT_SECONDS = 45L
         const val CALL_TIMEOUT_SECONDS = 50L
-        val DEFAULT_ATTEMPT_TIMEOUTS_MS: List<Long> = listOf(30_000L)
+        val DEFAULT_ATTEMPT_TIMEOUTS_MS: List<Long> = listOf(30_000L, 30_000L)
         const val MAX_OUTPUT_TOKENS = 4_000
         const val MAX_SEARCH_CALLS = 2
         const val SEARCH_CONTEXT_SIZE = "medium"
@@ -521,6 +556,8 @@ class OpenAiChatClient(
 }
 
 private class AuthenticationRejectedException : Exception()
+
+private class TimeoutChatAttemptException : Exception()
 
 private class RetryableChatAttemptException : Exception()
 

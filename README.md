@@ -24,6 +24,9 @@ GitHub 私有仓库：<https://github.com/EDwinpzy/global-voice-helper>
 - 无输入框助手会带上最近两轮对话；普通问题使用中等搜索上下文，最多搜索两次；
   回答按“结论 + 关键点 + 建议”组织；每个完整句子单独成行，多项内容使用
   阿拉伯数字编号并留出间距，且限制在覆盖层可完整显示的长度内。
+- 明确的“播放/打开/我要看”命令会请求 Video Pro 自动打开首条搜索结果；
+  “搜索/帮我找”类命令停留在搜索结果页。目标 Activity 由 signature 权限保护，
+  Intent 契约见 [Video Pro TV README](https://github.com/EDwinpzy/video-pro/blob/main/frontend-tv/README.md#voice-search-intent)。
 - 模型配置在设备上输入并保存到 `EncryptedSharedPreferences`，仓库不保存
   Base URL、API Key、账号或设备数据。
 

@@ -25,8 +25,40 @@ class ExplicitCommandResolverTest {
             ExplicitCommandResolver.resolve("我想听晴天"),
         )
         assertEquals(
+            ExplicitCommand.PlayMusic("周杰伦的晴天"),
+            ExplicitCommandResolver.resolve("帮我播放周杰伦的晴天"),
+        )
+        assertEquals(
+            ExplicitCommand.OpenVideoSearch(
+                VideoSearchRequest("凡人修仙传", openFirstResult = true),
+            ),
+            ExplicitCommandResolver.resolve("帮我播放凡人修仙传动漫"),
+        )
+        assertEquals(
             ExplicitCommand.OpenLiveFootball(LiveFootballRequest("阿森纳")),
             ExplicitCommandResolver.resolve("帮我打开阿森纳的比赛"),
+        )
+        assertEquals(
+            ExplicitCommand.OpenLiveFootball(LiveFootballRequest("国际米兰")),
+            ExplicitCommandResolver.resolve("帮我打开国际米兰的比赛"),
+        )
+        assertEquals(
+            ExplicitCommand.OpenApp(AppLaunchRequest("抖音")),
+            ExplicitCommandResolver.resolve("打开抖音"),
+        )
+        assertEquals(
+            ExplicitCommand.ControlDouyin(
+                DouyinVoiceRequest(
+                    operation = DouyinVoiceOperation.SEARCH,
+                    query = "三国演义",
+                    openFirstResult = true,
+                ),
+            ),
+            ExplicitCommandResolver.resolve("在抖音播放三国演义"),
+        )
+        assertEquals(
+            ExplicitCommand.Control(GlobalControlAction.CONFIRM),
+            ExplicitCommandResolver.resolve("确定"),
         )
     }
 

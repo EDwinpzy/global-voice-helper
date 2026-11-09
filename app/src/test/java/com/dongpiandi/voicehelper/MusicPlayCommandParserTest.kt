@@ -1,7 +1,9 @@
 package com.dongpiandi.voicehelper
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MusicPlayCommandParserTest {
@@ -31,5 +33,24 @@ class MusicPlayCommandParserTest {
         assertNull(MusicPlayCommandParser.parse("播放音乐"))
         assertNull(MusicPlayCommandParser.parse("我想听歌"))
         assertNull(MusicPlayCommandParser.parse("帮我播放晴天"))
+    }
+
+    @Test
+    fun artistTitleFormUsesImplicitMusicWithoutStealingVideoNouns() {
+        assertTrue(MusicPlayCommandParser.looksLikeImplicitArtistTitle("帮我播放周杰伦的晴天"))
+        assertFalse(MusicPlayCommandParser.looksLikeImplicitArtistTitle("帮我播放凡人修仙传动漫"))
+        assertEquals(
+            "周杰伦的晴天",
+            MusicPlayCommandParser.parse(
+                "帮我播放周杰伦的晴天",
+                allowImplicitMusic = true,
+            ),
+        )
+        assertNull(
+            MusicPlayCommandParser.parse(
+                "帮我播放凡人修仙传动漫",
+                allowImplicitMusic = true,
+            ),
+        )
     }
 }

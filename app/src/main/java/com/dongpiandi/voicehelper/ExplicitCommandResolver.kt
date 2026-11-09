@@ -19,6 +19,18 @@ internal sealed interface ExplicitCommand {
     data class OpenVideoSearch(
         val request: VideoSearchRequest,
     ) : ExplicitCommand
+
+    data class OpenApp(
+        val request: AppLaunchRequest,
+    ) : ExplicitCommand
+
+    data class ControlDouyin(
+        val request: DouyinVoiceRequest,
+    ) : ExplicitCommand
+
+    data class Control(
+        val action: GlobalControlAction,
+    ) : ExplicitCommand
 }
 
 /**
@@ -66,7 +78,13 @@ internal object ExplicitCommandResolver {
         LiveFootballScheduleCommandParser.parse(input)?.let { request ->
             return ExplicitCommand.ScheduleLiveFootball(request)
         }
-        MusicPlayCommandParser.parse(input)?.let { query ->
+        DouyinVoiceCommandParser.parse(input)?.let { request ->
+            return ExplicitCommand.ControlDouyin(request)
+        }
+        MusicPlayCommandParser.parse(
+            input,
+            allowImplicitMusic = MusicPlayCommandParser.looksLikeImplicitArtistTitle(input),
+        )?.let { query ->
             return ExplicitCommand.PlayMusic(query)
         }
         LiveFootballCommandParser.parse(input)?.let { request ->
@@ -74,6 +92,12 @@ internal object ExplicitCommandResolver {
         }
         VideoSearchCommandParser.parse(input)?.let { request ->
             return ExplicitCommand.OpenVideoSearch(request)
+        }
+        GlobalControlCommandParser.parse(input)?.let { action ->
+            return ExplicitCommand.Control(action)
+        }
+        AppLaunchCommandParser.parse(input)?.let { request ->
+            return ExplicitCommand.OpenApp(request)
         }
         return null
     }

@@ -6,10 +6,10 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 
-/** Starts the Music app's TV voice bridge with the requested song. */
+/** Starts the Music app's voice bridge with the requested song. */
 internal object MusicPlayLauncher {
     private const val MUSIC_PACKAGE = "top.izuna.foliamajor"
-    private const val TV_ACTIVITY = "top.izuna.foliamajor.TvActivity"
+    private const val ENTRY_ACTIVITY = "top.izuna.foliamajor.EntryActivity"
     private const val ACTION_VOICE_PLAY = "top.izuna.foliamajor.action.VOICE_PLAY"
     private const val EXTRA_QUERY = "query"
     private const val MAX_QUERY_LENGTH = 80
@@ -24,7 +24,7 @@ internal object MusicPlayLauncher {
 
         val intent =
             Intent(ACTION_VOICE_PLAY)
-                .setComponent(ComponentName(MUSIC_PACKAGE, TV_ACTIVITY))
+                .setComponent(ComponentName(MUSIC_PACKAGE, ENTRY_ACTIVITY))
                 .putExtra(EXTRA_QUERY, normalized)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
 

@@ -34,11 +34,17 @@ VoiceGatewayService (AccessibilityService)
 - `VoiceAssistantController`：助手会话、最近两轮上下文、模型请求、动作执行、回答展示
   和 TTS。明确的立即播放/打开命令先走本地确定性快速通道；非固定表达、上下文指代
   和定时动作交给模型判断。
-- `VideoSearchLauncher`：调用 Video Pro 的签名保护搜索入口。当前 Video Pro 1.0.0
-  会在首次同步搜索框文字时清除“打开首项”标记，且投影仪性能模式会隐藏其 Compose
-  语义树，投影仪输入设备也没有触摸屏。播放类请求仍先传 `openFirstResult=true`；若结果页
-  出现后尚未进入详情，助手用无障碍截图识别搜索输入线和首卡海报，再通过无障碍 D-pad
-  全局动作收起键盘、移动到首卡并确认打开。搜索类请求不发送导航动作，始终停留在结果页。
+- `VideoSearchLauncher`：调用 Video Pro 的搜索入口。Video Pro 已在前台时向 app 内
+  `VoiceSearchReceiver` 发广播，由同进程 `VoiceSearchBus` 消费，避开 Android 对
+  后台 Activity 启动的限制；不在前台时才启动 signature 权限保护的
+  `VoiceSearchActivity`。播放类请求传 `openFirstResult=true`，由 Video Pro 在结果
+  加载后进入首条详情；搜索类请求停留在结果页。helper 不再截图识别或补发 D-pad。
+- `DouyinVoiceLauncher`：通过 `VoiceEntryActivity` 和 UID 白名单校验的
+  ContentProvider 向抖音 TV 提交封闭命令；支持搜索、播放首条、暂停/继续、上一条/
+  下一条、评论、收藏/取消收藏和作者主页。前台命令直接进入 app 队列，后台先拉起抖音。
+- `InstalledAppLauncher` / `GlobalControlExecutor`：按 Launcher / Leanback 入口匹配
+  应用名并打开任意已安装 App；基础方向、确认、返回、主页、媒体和音量操作走无障碍
+  全局动作或系统媒体键。
 - `assistant/AssistantAction*`：解析并校验模型返回的结构化动作。当前白名单包含立即
   打开足球直播、视频搜索、音乐播放、定时足球直播和通用定时提醒。
 - `LiveFootballSchedule*`：仅在模型完全不可用时，为旧足球定时请求提供兼容兜底。

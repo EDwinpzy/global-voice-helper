@@ -85,7 +85,7 @@ class VoiceGatewayService : AccessibilityService() {
             return
         }
         instance = this
-        VideoSearchLauncher.attach(this)
+        GlobalControlExecutor.attach(this)
         vendorKeyRouter =
             VendorKeyRouter(this).also { router ->
                 router.restoreInterruptedState()
@@ -503,7 +503,7 @@ class VoiceGatewayService : AccessibilityService() {
 
     override fun onDestroy() {
         if (instance === this) instance = null
-        VideoSearchLauncher.detach(this)
+        GlobalControlExecutor.detach(this)
         main.removeCallbacksAndMessages(null)
         voiceKeyRoute.clear()
         endMicrophoneForeground()

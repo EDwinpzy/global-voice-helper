@@ -433,6 +433,12 @@ internal class VoiceAssistantController(
                 launchLiveFootball(token, command.request.query)
             is ExplicitCommand.OpenVideoSearch ->
                 launchVideo(token, command.request)
+            is ExplicitCommand.OpenApp ->
+                launchInstalledApp(token, command.request.name)
+            is ExplicitCommand.ControlDouyin ->
+                launchDouyin(token, command.request)
+            is ExplicitCommand.Control ->
+                runGlobalControl(token, command.action)
         }
         Log.i(TAG, "explicit command handled type=${command::class.simpleName}")
         return true
@@ -545,6 +551,55 @@ internal class VoiceAssistantController(
             )
         } else {
             showFailure(token, context.getString(R.string.assistant_video_pro_unavailable))
+        }
+    }
+
+    private fun launchInstalledApp(
+        token: Int,
+        name: String,
+    ) {
+        if (!isCurrent(token)) return
+        if (InstalledAppLauncher.open(context, name)) {
+            finishExternalLaunch()
+            Log.i(TAG, "installed app launched chars=${name.length}")
+        } else {
+            showFailure(
+                token,
+                context.getString(R.string.assistant_app_unavailable, name),
+            )
+        }
+    }
+
+    private fun launchDouyin(
+        token: Int,
+        request: DouyinVoiceRequest,
+    ) {
+        if (!isCurrent(token)) return
+        if (DouyinVoiceLauncher.open(context, request)) {
+            finishExternalLaunch()
+            Log.i(
+                TAG,
+                "Douyin command launched operation=${request.operation.wireValue} " +
+                    "chars=${request.query?.length ?: 0} openFirst=${request.openFirstResult}",
+            )
+        } else {
+            showFailure(token, context.getString(R.string.assistant_douyin_unavailable))
+        }
+    }
+
+    private fun runGlobalControl(
+        token: Int,
+        action: GlobalControlAction,
+    ) {
+        if (!isCurrent(token)) return
+        if (GlobalControlExecutor.perform(context, action)) {
+            finishExternalLaunch()
+            Log.i(TAG, "global control handled action=${action.name}")
+        } else {
+            showFailure(
+                token,
+                context.getString(R.string.assistant_control_unavailable),
+            )
         }
     }
 

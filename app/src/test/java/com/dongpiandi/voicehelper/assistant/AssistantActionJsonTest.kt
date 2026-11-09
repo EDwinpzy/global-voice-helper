@@ -47,6 +47,35 @@ class AssistantActionJsonTest {
     }
 
     @Test
+    fun jsonEnvelopeSurvivesLeadingProse() {
+        val envelope =
+            AssistantActionJson.parseEnvelope(
+                raw =
+                    """
+                    好的，正在为你处理。
+                    {"answer":"正在打开音乐。","action":{"type":"OPEN_MUSIC","query":"晴天"}}
+                    """.trimIndent(),
+                zone = zone,
+            )
+
+        assertEquals("正在打开音乐。", envelope?.answer)
+        assertEquals(
+            AssistantAction.OpenMusic("晴天"),
+            envelope?.action,
+        )
+    }
+
+    @Test
+    fun bracesInOrdinaryTextAreNotTreatedAsAnEnvelope() {
+        assertNull(
+            AssistantActionJson.parseEnvelope(
+                raw = "集合 {1, 2} 不是设备动作。",
+                zone = zone,
+            ),
+        )
+    }
+
+    @Test
     fun dateOnlyReminderUsesTheLocalMorningFallback() {
         val action =
             AssistantActionJson.parseAction(

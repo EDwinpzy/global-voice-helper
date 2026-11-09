@@ -29,6 +29,8 @@ internal object VideoSearchCommandParser {
             CommandPrefix("我要看一下", false, true),
             CommandPrefix("帮我看一下", false, true),
             CommandPrefix("给我看一下", false, true),
+            CommandPrefix("帮我播放", false, true),
+            CommandPrefix("给我播放", false, true),
             CommandPrefix("帮我搜索", true, false),
             CommandPrefix("帮我搜", true, false),
             CommandPrefix("帮我找", true, false),

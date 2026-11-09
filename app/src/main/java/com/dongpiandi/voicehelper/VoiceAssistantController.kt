@@ -333,6 +333,9 @@ internal class VoiceAssistantController(
             fail(context.getString(R.string.assistant_no_speech))
             return
         }
+        if (runExplicitCommand(transcript, token)) {
+            return
+        }
         answerJob?.cancel()
         answerJob =
             scope.launch {
@@ -341,10 +344,6 @@ internal class VoiceAssistantController(
                     val result = chatClient.complete(transcript, history.snapshot())
                     if (!isCurrent(token)) return@launch
                     if (result.model.isBlank() || result.answer.isBlank()) {
-                        if (runLocalFallback(transcript, token)) {
-                            Log.i(TAG, "assistant model unavailable; local fallback handled request")
-                            return@launch
-                        }
                         showFailure(token, result.answer.ifBlank {
                             context.getString(R.string.assistant_unavailable)
                         })
@@ -420,27 +419,23 @@ internal class VoiceAssistantController(
         scheduleDismiss(result.answer.length)
     }
 
-    private fun runLocalFallback(
+    private fun runExplicitCommand(
         transcript: String,
         token: Int,
     ): Boolean {
-        LiveFootballScheduleCommandParser.parse(transcript)?.let { request ->
-            scheduleLiveFootballFallback(token, transcript, request)
-            return true
+        val command = ExplicitCommandResolver.resolve(transcript) ?: return false
+        when (command) {
+            is ExplicitCommand.ScheduleLiveFootball ->
+                scheduleLiveFootballFallback(token, transcript, command.request)
+            is ExplicitCommand.PlayMusic ->
+                launchMusic(token, command.query)
+            is ExplicitCommand.OpenLiveFootball ->
+                launchLiveFootball(token, command.request.query)
+            is ExplicitCommand.OpenVideoSearch ->
+                launchVideo(token, command.request)
         }
-        MusicPlayCommandParser.parse(transcript)?.let { query ->
-            launchMusic(token, query)
-            return true
-        }
-        LiveFootballCommandParser.parse(transcript)?.let { request ->
-            launchLiveFootball(token, request.query)
-            return true
-        }
-        VideoSearchCommandParser.parse(transcript)?.let { request ->
-            launchVideo(token, request)
-            return true
-        }
-        return false
+        Log.i(TAG, "explicit command handled type=${command::class.simpleName}")
+        return true
     }
 
     private fun scheduleReminder(

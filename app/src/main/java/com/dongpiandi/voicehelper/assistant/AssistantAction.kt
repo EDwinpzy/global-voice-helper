@@ -187,16 +187,30 @@ internal object AssistantActionJson {
         }
 
     private fun extractJsonObject(raw: String): String? {
-        var text = raw.trim()
-        if (text.startsWith("```")) {
-            text =
-                text
-                    .replaceFirst(Regex("^```(?:json|JSON)?\\s*"), "")
-                    .replaceFirst(Regex("\\s*```$"), "")
-                    .trim()
+        val text =
+            raw
+                .trim()
+                .removePrefix("```json")
+                .removePrefix("```JSON")
+                .removePrefix("```")
+                .trim()
+        var start = text.indexOf('{')
+        while (start >= 0) {
+            var end = text.indexOf('}', start)
+            while (end >= 0) {
+                val candidate = text.substring(start, end + 1)
+                if (isAnswerEnvelope(candidate)) return candidate
+                end = text.indexOf('}', end + 1)
+            }
+            start = text.indexOf('{', start + 1)
         }
-        return text.takeIf { it.startsWith("{") }
+        return null
     }
+
+    private fun isAnswerEnvelope(candidate: String): Boolean =
+        runCatching {
+            JSONObject(candidate).has("answer")
+        }.getOrDefault(false)
 
     private fun requiredText(
         value: Any?,

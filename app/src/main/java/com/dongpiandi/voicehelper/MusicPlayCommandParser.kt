@@ -37,6 +37,11 @@ internal object MusicPlayCommandParser {
 
     private val musicNouns = listOf("音乐", "歌曲", "单曲", "专辑", "歌")
 
+    private val videoNouns = listOf("电影", "影片", "视频", "电视剧", "动漫", "综艺", "短剧", "片子")
+
+    private val artistTitlePattern =
+        Regex("""^[^的，,。.!！?？:：]{2,16}的[^的，,。.!！?？:：]{1,40}$""")
+
     private val blockedQueries =
         setOf(
             "音乐",
@@ -72,10 +77,36 @@ internal object MusicPlayCommandParser {
         if (input.length < 3) return null
 
         val command = commandPrefixes.firstOrNull { input.startsWith(it.text) } ?: return null
+        if (videoNouns.any(input::contains)) return null
         if (command.requiresMusicNoun && !allowImplicitMusic && musicNouns.none(input::contains)) {
             return null
         }
 
+        val query = extractQuery(input, command)
+        if (query.length !in MIN_QUERY_LENGTH..MAX_QUERY_LENGTH) return null
+        if (query.lowercase(Locale.ROOT) in blockedQueries) return null
+        return query
+    }
+
+    /**
+     * A bare "play <artist>的<song>" is treated as music when there is no video noun.
+     * Explicit video phrases such as "帮我播放凡人修仙传动漫" stay with the video parser.
+     */
+    fun looksLikeImplicitArtistTitle(transcript: String): Boolean {
+        val input = transcript.trim().replace(Regex("\\s+"), " ")
+        if (input.length < 4) return false
+
+        val command = commandPrefixes.firstOrNull { input.startsWith(it.text) } ?: return false
+        if (!command.requiresMusicNoun) return false
+        if (musicNouns.any(input::contains) || videoNouns.any(input::contains)) return false
+
+        return artistTitlePattern.matches(extractQuery(input, command))
+    }
+
+    private fun extractQuery(
+        input: String,
+        command: CommandPrefix,
+    ): String {
         var query = input.removePrefix(command.text).trim()
         query = leadingDecoration.replace(query, "").trim()
         query = stripQueryEdges(query)
@@ -86,9 +117,6 @@ internal object MusicPlayCommandParser {
             if (next == query) break
             query = next
         }
-
-        if (query.length !in MIN_QUERY_LENGTH..MAX_QUERY_LENGTH) return null
-        if (query.lowercase(Locale.ROOT) in blockedQueries) return null
         return query
     }
 

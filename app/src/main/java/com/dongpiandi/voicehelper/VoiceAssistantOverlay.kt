@@ -87,11 +87,9 @@ internal class VoiceAssistantOverlay(
         get() = visible && root?.isAttachedToWindow == true
 
     fun prewarm() {
-        // Keep the assistant backdrop mount warm without capturing or showing it. Dictation only
-        // needs the island and leaves this transparent layer at alpha zero.
-        ensureScreenBackdrop()
-        if (liveRoot() != null) return
-        ensureView(reveal = false)
+        // Do not keep accessibility overlay windows mounted while idle. On S621, a transparent
+        // full-screen overlay can suppress the hardware video plane and leave playback audible
+        // with no picture. The views are attached when the assistant is actually shown.
     }
 
     fun showListening() {
@@ -118,6 +116,7 @@ internal class VoiceAssistantOverlay(
         mode = OverlayMode.DICTATION
         // Dictation shares the voice island but never dims, blurs, or captures the screen.
         endScreenBlurSession(immediate = true)
+        releaseScreenBackdrop()
         val wasVisible = visible
         visible = true
         currentQuestion = ""
@@ -246,10 +245,17 @@ internal class VoiceAssistantOverlay(
 
     fun dismiss() {
         attachRequest++
-        if (!visible) return
+        if (!visible) {
+            releaseIdleWindows()
+            return
+        }
         visible = false
         endScreenBlurSession()
-        val view = liveRoot() ?: return
+        val view = liveRoot()
+        if (view == null) {
+            releaseIdleWindows()
+            return
+        }
         currentQuestion = ""
         exitAnimator?.cancel()
         exitAnimator =
@@ -257,7 +263,7 @@ internal class VoiceAssistantOverlay(
                 onEnd = {
                     exitAnimator = null
                     if (root === view && !visible) {
-                        view.finishHidden()
+                        releaseIdleWindows()
                     }
                 },
             ).also { it.start() }
@@ -265,21 +271,25 @@ internal class VoiceAssistantOverlay(
 
     fun close() {
         attachRequest++
+        releaseIdleWindows()
+        screenCaptureExecutor.shutdownNow()
+    }
+
+    private fun releaseIdleWindows() {
+        attachRequest++
         visible = false
-        endScreenBlurSession(immediate = true)
+        currentQuestion = ""
+        mode = OverlayMode.ASSISTANT
         cancelPendingExit()
         val view = root
         root = null
         rootHasAttached = false
-        currentQuestion = ""
-        mode = OverlayMode.ASSISTANT
         if (view != null) {
             runCatching { view.stopEverything() }
             runCatching { windowManager?.removeView(view) }
             view.releaseBackdrop()
         }
         releaseScreenBackdrop()
-        screenCaptureExecutor.shutdownNow()
     }
 
     private fun beginScreenBlurSession() {

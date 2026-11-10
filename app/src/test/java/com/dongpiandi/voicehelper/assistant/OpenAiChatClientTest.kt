@@ -562,6 +562,30 @@ class OpenAiChatClientTest {
     }
 
     @Test
+    fun actionEnvelopeWithLeadingProseIsStillExecuted() = runBlocking {
+        server.enqueue(
+            plainAnswerResponse(
+                """
+                好的，正在处理。
+                {
+                  "answer": "正在播放晴天。",
+                  "action": {
+                    "type": "OPEN_MUSIC",
+                    "query": "晴天"
+                  }
+                }
+                """.trimIndent(),
+            ),
+        )
+
+        val result = newClient().complete("我想听晴天")
+
+        assertEquals("正在播放晴天。", result.answer)
+        assertEquals(AssistantAction.OpenMusic("晴天"), result.action)
+        assertFalse(result.answer.contains("OPEN_MUSIC"))
+    }
+
+    @Test
     fun modelSelectedReminderCarriesItsFollowUpAction() = runBlocking {
         server.enqueue(
             plainAnswerResponse(

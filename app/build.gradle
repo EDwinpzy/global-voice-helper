@@ -3,6 +3,14 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+def releaseStorePassword =
+        project.findProperty('OTV_RELEASE_STORE_PASSWORD') ?:
+        System.getenv('OTV_RELEASE_STORE_PASSWORD') ?: ''
+def releaseKeyPassword =
+        project.findProperty('OTV_RELEASE_KEY_PASSWORD') ?:
+        System.getenv('OTV_RELEASE_KEY_PASSWORD') ?: ''
+def deviceReleaseSigning = project.findProperty('deviceReleaseSigning')?.toString()?.toBoolean() ?: false
+
 android {
     namespace 'com.dongpiandi.voicehelper'
     compileSdk 35
@@ -11,8 +19,8 @@ android {
         applicationId 'com.dongpiandi.voicehelper'
         minSdk 33
         targetSdk 34
-        versionCode 5
-        versionName '1.4'
+        versionCode 7
+        versionName '1.6'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         ndk {
             abiFilters 'armeabi-v7a', 'x86'
@@ -40,6 +48,30 @@ android {
         cmake {
             path 'src/main/cpp/CMakeLists.txt'
             version '3.22.1'
+        }
+    }
+
+    signingConfigs {
+        release {
+            storeFile rootProject.file('optimaltv-release.keystore')
+            storePassword releaseStorePassword
+            keyAlias 'optimaltv'
+            keyPassword releaseKeyPassword
+            enableV1Signing = true
+            enableV2Signing = true
+            v1SigningEnabled = true
+            v2SigningEnabled = true
+        }
+    }
+
+    buildTypes {
+        debug {
+            if (deviceReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
+        }
+        release {
+            signingConfig signingConfigs.release
         }
     }
 

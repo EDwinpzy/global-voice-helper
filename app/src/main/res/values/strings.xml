@@ -14,6 +14,9 @@
     <string name="assistant_video_pro_unavailable">未安装 Video Pro，或当前版本不支持语音搜索。</string>
     <string name="assistant_music_app_unavailable">未安装 Music，或当前版本不支持语音点歌。</string>
     <string name="assistant_live_football_unavailable">未安装球赛直播应用。</string>
+    <string name="assistant_app_unavailable">没有找到已安装的应用：%1$s。</string>
+    <string name="assistant_douyin_unavailable">未安装抖音 TV，或当前版本不支持语音控制。</string>
+    <string name="assistant_control_unavailable">当前无法执行这个操作，请确认语音助手服务已启用。</string>
     <string name="assistant_schedule_model_label">定时直播</string>
     <string name="assistant_live_schedule_confirmed">已安排：%1$s 自动打开%2$s直播。</string>
     <string name="assistant_live_schedule_confirmed_inexact">已安排：%1$s 自动打开%2$s直播。系统未允许精确定时，可能会稍有延迟；请到应用设置允许精确定时。</string>

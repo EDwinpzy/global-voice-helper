@@ -3,10 +3,10 @@
 面向 Android TV 的独立全局语音助手。它不是桌面、影视 App 或系统固件的一部分，
 而是通过无障碍服务在任意应用中提供语音听写和语音助手能力。
 
-GitHub 私有仓库：<https://github.com/EDwinpzy/global-voice-helper>
+GitHub 仓库：<https://github.com/EDwinpzy/global-voice-helper>
 
-当前状态：内部测试版，主要在坚果 S621（Android 13）上验证。原厂识别依赖
-`com.jmgo.ai.voice`，32 位 ABI 要求依赖具体固件。
+当前状态：正式版 `1.6`（`versionCode 7`），主要在坚果 S621（Android 13）上
+验证。原厂识别依赖 `com.jmgo.ai.voice`，32 位 ABI 要求依赖具体固件。
 
 ## 功能
 
@@ -26,12 +26,21 @@ GitHub 私有仓库：<https://github.com/EDwinpzy/global-voice-helper>
 - 无输入框助手会带上最近两轮对话；普通问题使用中等搜索上下文，最多搜索两次；
   回答按“结论 + 关键点 + 建议”组织；每个完整句子单独成行，多项内容使用
   阿拉伯数字编号并留出间距，且限制在覆盖层可完整显示的长度内。
-- 设备操作不靠固定句式预先分流。模型读取当前时间、时区和最近对话，自行判断应普通
-  回答、立即打开，还是安排未来动作；只有模型配置或网络完全不可用时才使用本地命令
-  兼容兜底。可执行动作仍是封闭白名单，不接受模型生成任意 Intent 或脚本。
+- 明确的“播放/打开”命令先走本地确定性快速通道，避免模型只返回普通文本时丢失
+  目标 App 动作；其余设备操作由模型读取当前时间、时区和最近对话，自行判断应普通
+  回答、立即打开，还是安排未来动作。可执行动作仍是封闭白名单，不接受模型生成任意
+  Intent 或脚本。
 - 模型判断用户要直接播放/打开影视时，会请求 Video Pro 自动打开首条搜索结果；
-  判断为“搜索/帮我找”时停留在搜索结果页。目标 Activity 由 signature 权限保护，
-  Intent 契约见 [Video Pro TV README](https://github.com/EDwinpzy/video-pro/blob/main/frontend-tv/README.md#voice-search-intent)。
+  判断为“搜索/帮我找”时停留在搜索结果页。Video Pro 已在前台时通过 app 内接收器
+  提交，不在播放器上覆盖启动新 Activity；从其他 App 进入时仍使用 signature 权限保护
+  的搜索 Activity。契约见
+  [Video Pro TV README](https://github.com/EDwinpzy/video-pro/blob/main/frontend-tv/README.md#voice-search-intent)。
+- 抖音 TV 支持语音打开、搜索、播放首条结果、暂停/继续、上一条/下一条、评论、收藏/
+  取消收藏和打开作者主页。命令经 UID 白名单 ContentProvider 进入抖音进程；前台直接
+  消费，后台先拉起入口页。平台返回安全校验时停在搜索页，不绕过抖音限制。
+- 可通过已安装 App 的 Launcher / Leanback 入口说“打开/启动 + 应用名”；方向键、确定、
+  返回、主页、最近任务、通知、音量、静音、播放暂停、上一条/下一条、快进/快退等基础
+  操作走全局无障碍或媒体键路径。
 - 问完今晚足球赛程后，可以自然地说希望某场比赛到点自动打开。模型结合上一轮赛程和
   当前时间生成定时动作，使用系统闹钟跨应用定时；到点由球迹直播应用打开对应比赛。
   精确定时需要系统“闹钟和提醒”权限，未授权时会降级为近似时间并明确提示。

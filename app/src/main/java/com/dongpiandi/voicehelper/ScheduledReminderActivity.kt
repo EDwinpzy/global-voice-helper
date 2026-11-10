@@ -209,6 +209,17 @@ class ScheduledReminderActivity : Activity() {
                     )
                 is AssistantAction.OpenMusic ->
                     MusicPlayLauncher.open(this, followUp.query)
+                is AssistantAction.OpenMusicEntry ->
+                    MusicPlayLauncher.openEntry(this, followUp.entry, followUp.query)
+                is AssistantAction.OpenDouyinSearch ->
+                    DouyinVoiceLauncher.open(
+                        this,
+                        DouyinVoiceRequest(
+                            operation = DouyinVoiceOperation.SEARCH,
+                            query = followUp.query,
+                            openFirstResult = followUp.openFirstResult,
+                        ),
+                    )
             }
         if (!launched) {
             val message =
@@ -219,6 +230,10 @@ class ScheduledReminderActivity : Activity() {
                         R.string.assistant_video_pro_unavailable
                     is AssistantAction.OpenMusic ->
                         R.string.assistant_music_app_unavailable
+                    is AssistantAction.OpenMusicEntry ->
+                        R.string.assistant_music_entry_update_required
+                    is AssistantAction.OpenDouyinSearch ->
+                        R.string.assistant_douyin_unavailable
                 }
             Toast.makeText(this, message, Toast.LENGTH_LONG).show()
         }

@@ -32,6 +32,16 @@ sealed interface AssistantAction {
         val query: String,
     ) : Immediate
 
+    data class OpenMusicEntry(
+        val entry: MusicEntry,
+        val query: String? = null,
+    ) : Immediate
+
+    data class OpenDouyinSearch(
+        val query: String,
+        val openFirstResult: Boolean = true,
+    ) : Immediate
+
     data class ScheduleLiveFootball(
         val query: String,
         val kickoffAtEpochMs: Long,
@@ -46,6 +56,30 @@ sealed interface AssistantAction {
         val followUp: Immediate?,
         val autoRunFollowUp: Boolean = false,
     ) : AssistantAction
+}
+
+enum class MusicEntry(
+    val wireValue: String,
+    val requiresQuery: Boolean = false,
+) {
+    RESUME("music.resume"),
+    LIKED("music.liked"),
+    PERSONAL_FM("music.personal_fm"),
+    DAILY_RECOMMENDATIONS("music.daily_recommendations"),
+    LOCAL("music.local"),
+    RECENT("music.recent"),
+    CLOUD("music.cloud"),
+    PLAYLIST("music.playlist", requiresQuery = true),
+    ALBUM("music.album", requiresQuery = true),
+    RADIO("music.radio", requiresQuery = true),
+    ;
+
+    companion object {
+        fun fromWire(value: String?): MusicEntry? =
+            entries.firstOrNull { entry ->
+                entry.wireValue.equals(value?.trim(), ignoreCase = true)
+            }
+    }
 }
 
 internal data class AssistantActionEnvelope(
@@ -100,6 +134,24 @@ internal object AssistantActionJson {
             "OPEN_MUSIC" -> {
                 val query = requiredText(action.opt("query"), MAX_QUERY_LENGTH) ?: return null
                 AssistantAction.OpenMusic(query)
+            }
+            "OPEN_MUSIC_ENTRY" -> {
+                val entry =
+                    MusicEntry.fromWire(optionalText(action.opt("entry"), MAX_ENTRY_LENGTH))
+                        ?: return null
+                val query = optionalText(action.opt("query"), MAX_QUERY_LENGTH)
+                if (entry.requiresQuery && query == null) return null
+                AssistantAction.OpenMusicEntry(
+                    entry = entry,
+                    query = query.takeIf { entry.requiresQuery },
+                )
+            }
+            "OPEN_DOUYIN_SEARCH" -> {
+                val query = requiredText(action.opt("query"), MAX_QUERY_LENGTH) ?: return null
+                AssistantAction.OpenDouyinSearch(
+                    query = query,
+                    openFirstResult = action.optBoolean("openFirstResult", true),
+                )
             }
             "SCHEDULE_LIVE_FOOTBALL" -> {
                 val query = requiredText(action.opt("query"), MAX_QUERY_LENGTH) ?: return null
@@ -167,6 +219,18 @@ internal object AssistantActionJson {
                 JSONObject()
                     .put("type", "OPEN_MUSIC")
                     .put("query", action.query)
+            is AssistantAction.OpenMusicEntry ->
+                JSONObject()
+                    .put("type", "OPEN_MUSIC_ENTRY")
+                    .put("entry", action.entry.wireValue)
+                    .apply {
+                        action.query?.let { put("query", it) }
+                    }
+            is AssistantAction.OpenDouyinSearch ->
+                JSONObject()
+                    .put("type", "OPEN_DOUYIN_SEARCH")
+                    .put("query", action.query)
+                    .put("openFirstResult", action.openFirstResult)
             is AssistantAction.ScheduleLiveFootball ->
                 JSONObject()
                     .put("type", "SCHEDULE_LIVE_FOOTBALL")
@@ -258,6 +322,7 @@ internal object AssistantActionJson {
     }
 
     private const val MAX_QUERY_LENGTH = 80
+    private const val MAX_ENTRY_LENGTH = 40
     private const val MAX_DISPLAY_NAME_LENGTH = 100
     private const val MAX_TITLE_LENGTH = 100
     private const val MAX_MESSAGE_LENGTH = 240
@@ -277,6 +342,12 @@ internal object AssistantActionValidator {
             is AssistantAction.OpenVideoSearch ->
                 action.takeIf { it.query.isNotBlank() }
             is AssistantAction.OpenMusic ->
+                action.takeIf { it.query.isNotBlank() }
+            is AssistantAction.OpenMusicEntry ->
+                action.takeIf {
+                    !it.entry.requiresQuery || !it.query.isNullOrBlank()
+                }
+            is AssistantAction.OpenDouyinSearch ->
                 action.takeIf { it.query.isNotBlank() }
             is AssistantAction.ScheduleLiveFootball ->
                 action.takeIf {

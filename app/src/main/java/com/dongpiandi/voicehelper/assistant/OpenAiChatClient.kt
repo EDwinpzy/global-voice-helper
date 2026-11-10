@@ -549,9 +549,26 @@ class OpenAiChatClient(
             1. OPEN_LIVE_FOOTBALL：现在打开足球直播。query 可选，填球队、赛事或比赛名称。
             2. OPEN_VIDEO_SEARCH：现在在视频应用搜索影视内容。query 必填；openFirstResult=true 表示直接尝试打开第一条结果，false 表示停在搜索结果。
             3. OPEN_MUSIC：现在在音乐应用播放歌曲。query 必填。
-            4. SCHEDULE_LIVE_FOOTBALL：到未来开赛时间自动打开足球直播。query 必填，kickoffAt 必填，displayName 可选。
-            5. SCHEDULE_REMINDER：在未来某个时间提醒用户，并可让用户当场确认下一步；也支持到点直接执行白名单动作。triggerAt、title、message 必填；confirmLabel 可选；followUp 可选；autoRunFollowUp 可选。
-               followUp 只能是 OPEN_LIVE_FOOTBALL、OPEN_VIDEO_SEARCH 或 OPEN_MUSIC，格式与上面的动作相同。
+            4. OPEN_MUSIC_ENTRY：播放音乐应用里的内置入口。entry 必填；音乐云盘、指定歌单、专辑和电台还要填 query。
+               entry 只能是：music.resume（继续当前或播放音乐）、music.liked（我喜欢）、music.personal_fm（私人FM）、
+               music.daily_recommendations（每日推荐）、music.local（本地歌曲）、music.recent（最近播放）、
+               music.cloud（音乐云盘）、music.playlist（指定歌单，query 必填）、music.album（指定收藏专辑，query 必填）、
+               music.radio（指定推荐电台或推荐歌单，query 必填）。
+            5. OPEN_DOUYIN_SEARCH：只在用户明确说“抖音/抖音TV/短视频”时，在抖音搜索内容。query 必填；openFirstResult=true 表示播放首条，false 表示停在搜索结果。
+            6. SCHEDULE_LIVE_FOOTBALL：到未来开赛时间自动打开足球直播。query 必填，kickoffAt 必填，displayName 可选。
+            7. SCHEDULE_REMINDER：在未来某个时间提醒用户，并可让用户当场确认下一步；也支持到点直接执行白名单动作。triggerAt、title、message 必填；confirmLabel 可选；followUp 可选；autoRunFollowUp 可选。
+               followUp 只能是 OPEN_LIVE_FOOTBALL、OPEN_VIDEO_SEARCH、OPEN_MUSIC、OPEN_MUSIC_ENTRY 或 OPEN_DOUYIN_SEARCH，格式与上面的动作相同。
+
+            媒体类型判断规则：
+            1. 用户说“播放/观看/听 + 内容名”且没有指定 App 时，先判断内容是歌曲、影视、足球直播还是短视频，再选动作；不要把裸“播放XX”默认当成影视。
+            2. 具体歌名、歌手或“听歌”语境选 OPEN_MUSIC；query 填歌曲和歌手，例如“周杰伦 晴天”。
+            3. 电影、电视剧、动漫、综艺、短剧、纪录片或普通视频选 OPEN_VIDEO_SEARCH。用户说“播放/观看/看”时 openFirstResult=true；说“搜索/帮我找”时 false。
+            4. 明确是足球直播、球队比赛或赛事直播时选 OPEN_LIVE_FOOTBALL。篮球、网球、F1 等球迹直播不支持的赛事不要选足球直播，改用普通文本说明。
+            5. 用户明确提到抖音、抖音TV或短视频时选 OPEN_DOUYIN_SEARCH；没有明确 App 的普通视频仍选 Video Pro。
+            6. “我喜欢”“私人FM”“每日推荐”“音乐云盘”等音乐 App 内置入口选 OPEN_MUSIC_ENTRY，不要当成歌曲名去搜索。
+            7. 同名内容可能是歌曲也可能是影视，或无法判断媒体类型时，不要执行动作；返回普通文本请用户在音乐和影视之间选择。
+            8. 用户只说“播放音乐”或“继续播放”时选 music.resume；没有具体歌名时不要编造歌曲。
+            9. 多个 App 都能执行时，优先选择能直接完成播放的类型；动作里没有包名或任意 Intent 字段，不能自行编造 App 或页面。
 
             时间和执行规则：
             1. kickoffAt 和 triggerAt 必须使用带时区的 RFC 3339 时间，例如 2026-11-08T03:00:00+08:00，不能写“今晚”“开赛后”等相对文本。
@@ -572,6 +589,21 @@ class OpenAiChatClient(
             助手：{"answer":"已安排明晚八点自动播放《晴天》。","action":{"type":"SCHEDULE_REMINDER","triggerAt":"2026-11-08T20:00:00+08:00","title":"播放《晴天》","message":"到点自动播放音乐。","autoRunFollowUp":true,"followUp":{"type":"OPEN_MUSIC","query":"周杰伦 晴天"}}}
 
             立即动作示例：
+            用户：播放晴天。
+            助手：{"answer":"正在播放周杰伦的《晴天》。","action":{"type":"OPEN_MUSIC","query":"晴天"}}
+
+            用户：播放流浪地球。
+            助手：{"answer":"正在视频应用查找并播放《流浪地球》。","action":{"type":"OPEN_VIDEO_SEARCH","query":"流浪地球","openFirstResult":true}}
+
+            用户：播放每日推荐。
+            助手：{"answer":"正在播放每日推荐。","action":{"type":"OPEN_MUSIC_ENTRY","entry":"music.daily_recommendations"}}
+
+            用户：打开私人FM。
+            助手：{"answer":"正在打开私人FM。","action":{"type":"OPEN_MUSIC_ENTRY","entry":"music.personal_fm"}}
+
+            用户：在抖音看三国演义。
+            助手：{"answer":"正在抖音搜索并播放三国演义。","action":{"type":"OPEN_DOUYIN_SEARCH","query":"三国演义","openFirstResult":true}}
+
             用户：现在打开阿森纳直播。
             助手：{"answer":"正在打开阿森纳直播。","action":{"type":"OPEN_LIVE_FOOTBALL","query":"阿森纳"}}
             """.trimIndent()

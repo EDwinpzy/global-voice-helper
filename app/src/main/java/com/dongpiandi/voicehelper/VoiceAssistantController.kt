@@ -386,6 +386,17 @@ internal class VoiceAssistantController(
                 )
             is AssistantAction.OpenMusic ->
                 launchMusic(token, action.query)
+            is AssistantAction.OpenMusicEntry ->
+                launchMusicEntry(token, action)
+            is AssistantAction.OpenDouyinSearch ->
+                launchDouyin(
+                    token,
+                    DouyinVoiceRequest(
+                        operation = DouyinVoiceOperation.SEARCH,
+                        query = action.query,
+                        openFirstResult = action.openFirstResult,
+                    ),
+                )
             is AssistantAction.ScheduleLiveFootball ->
                 scheduleLiveFootball(token, transcript, action)
             is AssistantAction.ScheduleReminder ->
@@ -424,6 +435,11 @@ internal class VoiceAssistantController(
         token: Int,
     ): Boolean {
         val command = ExplicitCommandResolver.resolve(transcript) ?: return false
+        if (command is ExplicitCommand.OpenApp &&
+            InstalledAppLauncher.find(context, command.request.name) == null
+        ) {
+            return false
+        }
         when (command) {
             is ExplicitCommand.ScheduleLiveFootball ->
                 scheduleLiveFootballFallback(token, transcript, command.request)
@@ -532,6 +548,34 @@ internal class VoiceAssistantController(
         if (MusicPlayLauncher.open(context, query)) {
             finishExternalLaunch()
             Log.i(TAG, "music-play launched chars=${query.length}")
+        } else {
+            showFailure(token, context.getString(R.string.assistant_music_app_unavailable))
+        }
+    }
+
+    private fun launchMusicEntry(
+        token: Int,
+        action: AssistantAction.OpenMusicEntry,
+    ) {
+        if (!isCurrent(token)) return
+        if (!MusicPlayLauncher.isInstalled(context)) {
+            showFailure(token, context.getString(R.string.assistant_music_app_unavailable))
+            return
+        }
+        if (!MusicPlayLauncher.supportsEntries(context)) {
+            showFailure(
+                token,
+                context.getString(R.string.assistant_music_entry_update_required),
+            )
+            return
+        }
+        if (MusicPlayLauncher.openEntry(context, action.entry, action.query)) {
+            finishExternalLaunch()
+            Log.i(
+                TAG,
+                "music-entry launched entry=${action.entry.wireValue} " +
+                    "chars=${action.query?.length ?: 0}",
+            )
         } else {
             showFailure(token, context.getString(R.string.assistant_music_app_unavailable))
         }

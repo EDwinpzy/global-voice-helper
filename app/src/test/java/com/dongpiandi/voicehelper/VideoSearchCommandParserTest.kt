@@ -12,9 +12,9 @@ class VideoSearchCommandParserTest {
         assertEquals("流浪地球", VideoSearchCommandParser.parse("我要看流浪地球")?.query)
         assertEquals("流浪地球2", VideoSearchCommandParser.parse("我想看《流浪地球2》")?.query)
         assertEquals("庆余年", VideoSearchCommandParser.parse("帮我看一下庆余年吧")?.query)
-        assertEquals("凡人修仙传", VideoSearchCommandParser.parse("帮我播放凡人修仙传")?.query)
         assertTrue(VideoSearchCommandParser.parse("我要看流浪地球")?.openFirstResult == true)
-        assertTrue(VideoSearchCommandParser.parse("帮我播放凡人修仙传")?.openFirstResult == true)
+        assertNull(VideoSearchCommandParser.parse("帮我播放凡人修仙传"))
+        assertNull(VideoSearchCommandParser.parse("给我播放凡人修仙传"))
     }
 
     @Test
@@ -40,7 +40,10 @@ class VideoSearchCommandParserTest {
         assertFalse(VideoSearchCommandParser.parse("搜索流浪地球电影")?.openFirstResult == true)
         assertFalse(VideoSearchCommandParser.parse("帮我搜一下三体电视剧")?.openFirstResult == true)
         assertTrue(VideoSearchCommandParser.parse("播放流浪地球电影")?.openFirstResult == true)
-        assertTrue(VideoSearchCommandParser.parse("给我播放凡人修仙传")?.openFirstResult == true)
+        assertEquals(
+            "凡人修仙传",
+            VideoSearchCommandParser.parse("给我播放凡人修仙传动漫")?.query,
+        )
     }
 
     @Test

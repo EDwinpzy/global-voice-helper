@@ -10,14 +10,18 @@
 3. [模型延迟基准](how-to/benchmark-models.md)：在现有 App 内重复测试模型速度。
 4. [2026-11-05 模型延迟结果](reference/model-benchmark-2026-11-05.md)：本轮实机
    测试数据与选型结论。
-5. [ADR-0001](architecture/adr/0001-independent-global-helper.md)：为什么采用独立
+5. [2026-11-10 S621 语音能力巡检](reference/s621-voice-capabilities-2026-11-10.md)：
+   各 App 的真实页面入口和可用语音桥。
+6. [ADR-0001](architecture/adr/0001-independent-global-helper.md)：为什么采用独立
    helper，而不是绑定单个业务 App 或修改固件。
-6. [ADR-0002：模型超时兜底](architecture/adr/0002-timeout-fallback-model.md)：为什么
+7. [ADR-0002：模型超时兜底](architecture/adr/0002-timeout-fallback-model.md)：为什么
    只在超时时切换到 `group/free`。
-7. [ADR-0003](architecture/adr/0003-scheduled-live-football.md)：为什么用
+8. [ADR-0003](architecture/adr/0003-scheduled-live-football.md)：为什么用
    `AlarmManager` 和透明启动页实现定时足球直播。
-8. [ADR-0004：模型选择定时动作与通用提醒](architecture/adr/0004-model-selected-scheduled-actions.md)：
+9. [ADR-0004：模型选择定时动作与通用提醒](architecture/adr/0004-model-selected-scheduled-actions.md)：
     为什么改为模型理解意图，以及到点提醒如何询问下一步动作。
+10. [ADR-0005：模型判断媒体类型与音乐内置入口](architecture/adr/0005-model-media-intent-routing.md)：
+    为什么裸“播放XX”改由模型分类，以及 Folia 如何接收版本化音乐入口。
 
 ## 文档职责
 

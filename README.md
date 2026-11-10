@@ -3,10 +3,10 @@
 面向 Android TV 的独立全局语音助手。它不是桌面、影视 App 或系统固件的一部分，
 而是通过无障碍服务在任意应用中提供语音听写和语音助手能力。
 
-GitHub 私有仓库：<https://github.com/EDwinpzy/global-voice-helper>
+GitHub 仓库：<https://github.com/EDwinpzy/global-voice-helper>
 
-当前状态：内部测试版，主要在坚果 S621（Android 13）上验证。原厂识别依赖
-`com.jmgo.ai.voice`，32 位 ABI 要求依赖具体固件。
+当前状态：正式版 `1.6`（`versionCode 7`），主要在坚果 S621（Android 13）上
+验证。原厂识别依赖 `com.jmgo.ai.voice`，32 位 ABI 要求依赖具体固件。
 
 ## 功能
 

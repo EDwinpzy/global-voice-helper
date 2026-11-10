@@ -5,8 +5,9 @@ import java.util.Locale
 /**
  * Extracts an explicit music request from an assistant transcript.
  *
- * Bare "播放<标题>" stays with the video parser. Music only takes commands that say "听", or
- * "播放/放" together with a music noun, so an ambiguous video title is not stolen.
+ * Bare "播放<标题>" stays with the video parser unless the caller recognizes an unambiguous
+ * artist-title pattern. Built-in collection and station names are also left to model routing so
+ * they are not turned into song searches.
  */
 internal object MusicPlayCommandParser {
     private const val MIN_QUERY_LENGTH = 1
@@ -38,6 +39,19 @@ internal object MusicPlayCommandParser {
     private val musicNouns = listOf("音乐", "歌曲", "单曲", "专辑", "歌")
 
     private val videoNouns = listOf("电影", "影片", "视频", "电视剧", "动漫", "综艺", "短剧", "片子")
+
+    private val mediaEntryMarkers =
+        listOf(
+            "歌单",
+            "专辑",
+            "电台",
+            "音乐云盘",
+            "我喜欢",
+            "私人FM",
+            "每日推荐",
+            "本地歌曲",
+            "最近播放",
+        )
 
     private val artistTitlePattern =
         Regex("""^[^的，,。.!！?？:：]{2,16}的[^的，,。.!！?？:：]{1,40}$""")
@@ -75,6 +89,7 @@ internal object MusicPlayCommandParser {
     ): String? {
         val input = transcript.trim().replace(Regex("\\s+"), " ")
         if (input.length < 3) return null
+        if (mediaEntryMarkers.any(input::contains)) return null
 
         val command = commandPrefixes.firstOrNull { input.startsWith(it.text) } ?: return null
         if (videoNouns.any(input::contains)) return null

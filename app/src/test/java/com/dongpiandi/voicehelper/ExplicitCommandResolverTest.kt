@@ -17,6 +17,9 @@ class ExplicitCommandResolverTest {
         assertNull(ExplicitCommandResolver.resolve("帮我播放凡人修仙传"))
         assertNull(ExplicitCommandResolver.resolve("播放晴天"))
         assertNull(ExplicitCommandResolver.resolve("播放每日推荐"))
+        assertNull(ExplicitCommandResolver.resolve("播放歌单车载MP3永久保留曲目"))
+        assertNull(ExplicitCommandResolver.resolve("播放专辑晴天"))
+        assertNull(ExplicitCommandResolver.resolve("播放音乐云盘"))
         assertEquals(
             ExplicitCommand.PlayMusic("晴天"),
             ExplicitCommandResolver.resolve("我想听晴天"),

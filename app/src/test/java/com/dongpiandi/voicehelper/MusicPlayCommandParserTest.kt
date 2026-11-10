@@ -33,6 +33,9 @@ class MusicPlayCommandParserTest {
         assertNull(MusicPlayCommandParser.parse("播放音乐"))
         assertNull(MusicPlayCommandParser.parse("我想听歌"))
         assertNull(MusicPlayCommandParser.parse("帮我播放晴天"))
+        assertNull(MusicPlayCommandParser.parse("播放歌单车载MP3永久保留曲目"))
+        assertNull(MusicPlayCommandParser.parse("播放专辑晴天"))
+        assertNull(MusicPlayCommandParser.parse("播放音乐云盘"))
     }
 
     @Test

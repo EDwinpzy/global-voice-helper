@@ -33,7 +33,7 @@ internal object MusicPlayLauncher {
             Intent(ACTION_VOICE_PLAY)
                 .setComponent(ComponentName(MUSIC_PACKAGE, ENTRY_ACTIVITY))
                 .putExtra(EXTRA_QUERY, normalized)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .addFlags(voiceEntryFlags)
 
         return try {
             context.startActivity(intent)
@@ -61,7 +61,7 @@ internal object MusicPlayLauncher {
                 .setComponent(ComponentName(MUSIC_PACKAGE, ENTRY_ACTIVITY))
                 .putExtra(EXTRA_OPERATION, OPERATION_PLAY_ENTRY)
                 .putExtra(EXTRA_ENTRY, entry.wireValue)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .addFlags(voiceEntryFlags)
         if (normalizedQuery.isNotEmpty()) intent.putExtra(EXTRA_QUERY, normalizedQuery)
 
         return try {
@@ -98,4 +98,11 @@ internal object MusicPlayLauncher {
         } catch (_: Exception) {
             false
         }
+
+    // Folia's TV and car screens are singleTask. CLEAR_TOP forces a fresh transparent entry
+    // instead of letting ActivityManager only surface the existing task and drop the voice extras.
+    private val voiceEntryFlags =
+        Intent.FLAG_ACTIVITY_NEW_TASK or
+            Intent.FLAG_ACTIVITY_CLEAR_TOP or
+            Intent.FLAG_ACTIVITY_SINGLE_TOP
 }

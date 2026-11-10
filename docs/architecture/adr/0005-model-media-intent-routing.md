@@ -22,7 +22,8 @@ App。
    动作，不能输出包名、Component、URL 或任意 Intent。
 2. 本地快速通道只保留无语义歧义的命令：输入框动作、全局控制、明确的“看/搜索”
    表达、带媒体名词的“播放XX电影/动漫”、明确 App 名和明确足球赛事。裸“播放标题”
-   不再被视频解析器抢占。
+   不再被视频解析器抢占；即使句子里带“歌”，歌单、专辑、电台、音乐云盘、我喜欢、
+   私人 FM、每日推荐等内置入口也留给模型路由，不能被本地解析成歌曲名。
 3. 新增 `OPEN_MUSIC_ENTRY`，用于 Folia 的内置入口：
    `music.resume`、`music.liked`、`music.personal_fm`、
    `music.daily_recommendations`、`music.local`、`music.recent`、
@@ -41,6 +42,8 @@ App。
 
    旧的 `VOICE_PLAY` 和标准媒体搜索 Intent 保持不变。helper 先查询目标 App 是否声明
    `VOICE_COMMAND_V1`；旧版本 Folia 不支持时明确提示更新，不把入口名退化成歌曲搜索。
+   启动入口带上 `NEW_TASK | CLEAR_TOP | SINGLE_TOP`，确保 Folia 已有 TV/车机任务时仍执行
+   新请求，而不是只把旧任务带到前台。
 6. S621 实机巡检确认：Video Pro 有 signature 保护的搜索 Activity/前台 Receiver；
    球迹直播有 `VOICE_OPEN_MATCH`；抖音 TV 有 UID 白名单 ContentProvider；影视仓
    `com.xiaodianshi.tv.yst` 只有通用 URI/媒体广播，没有供 helper 使用的可信语音命令

@@ -245,4 +245,67 @@ class AssistantActionJsonTest {
         assertTrue(encoded.has("query"))
         assertFalse(encoded.has("followUp"))
     }
+
+    @Test
+    fun musicEntriesAndNamedCollectionsAreRoundTripped() {
+        val entry = AssistantAction.OpenMusicEntry(MusicEntry.LIKED)
+        assertEquals(
+            entry,
+            AssistantActionJson.parseAction(AssistantActionJson.encode(entry), zone),
+        )
+
+        val playlist =
+            AssistantAction.OpenMusicEntry(
+                entry = MusicEntry.PLAYLIST,
+                query = "车载MP3永久保留曲目",
+            )
+        assertEquals(
+            playlist,
+            AssistantActionJson.parseAction(AssistantActionJson.encode(playlist), zone),
+        )
+
+        assertNull(
+            AssistantActionJson.parseAction(
+                JSONObject(
+                    """
+                    {
+                      "type": "OPEN_MUSIC_ENTRY",
+                      "entry": "music.playlist"
+                    }
+                    """.trimIndent(),
+                ),
+                zone,
+            ),
+        )
+        assertNull(
+            AssistantActionJson.parseAction(
+                JSONObject(
+                    """
+                    {
+                      "type": "OPEN_MUSIC_ENTRY",
+                      "entry": "music.unknown"
+                    }
+                    """.trimIndent(),
+                ),
+                zone,
+            ),
+        )
+    }
+
+    @Test
+    fun douyinSearchIsPartOfTheImmediateWhitelist() {
+        val action =
+            AssistantAction.OpenDouyinSearch(
+                query = "三国演义",
+                openFirstResult = true,
+            )
+        assertEquals(
+            action,
+            AssistantActionJson.parseAction(AssistantActionJson.encode(action), zone),
+        )
+        assertEquals(
+            action,
+            AssistantActionValidator.validateAt(action, now),
+        )
+    }
 }

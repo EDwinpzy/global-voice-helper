@@ -32,8 +32,8 @@ VoiceGatewayService (AccessibilityService)
 - `VoiceGatewayService`：服务生命周期、按键路由、编辑连接和窗口判断。
 - `VoiceDictationController`：一次按键对应一次原厂识别和一次文本提交。
 - `VoiceAssistantController`：助手会话、最近两轮上下文、模型请求、动作执行、回答展示
-  和 TTS。明确的立即播放/打开命令先走本地确定性快速通道；非固定表达、上下文指代
-  和定时动作交给模型判断。
+  和 TTS。裸“播放/观看 + 标题”交给模型判断歌曲、影视、足球直播或短视频；本地快速
+  通道只处理明确控制、明确 App 名和带媒体名词的无歧义表达。
 - `VideoSearchLauncher`：调用 Video Pro 的搜索入口。Video Pro 已在前台时向 app 内
   `VoiceSearchReceiver` 发广播，由同进程 `VoiceSearchBus` 消费，避开 Android 对
   后台 Activity 启动的限制；不在前台时才启动 signature 权限保护的
@@ -42,11 +42,16 @@ VoiceGatewayService (AccessibilityService)
 - `DouyinVoiceLauncher`：通过 `VoiceEntryActivity` 和 UID 白名单校验的
   ContentProvider 向抖音 TV 提交封闭命令；支持搜索、播放首条、暂停/继续、上一条/
   下一条、评论、收藏/取消收藏和作者主页。前台命令直接进入 app 队列，后台先拉起抖音。
+- `MusicPlayLauncher`：向 Folia 发送歌曲搜索，或通过 `VOICE_COMMAND_V1` 的
+  `PLAY_ENTRY` 打开“我喜欢、私人FM、每日推荐、本地/最近、音乐云盘、歌单、专辑、
+  推荐电台”等语义入口。入口名由 Folia 在当前首页卡片中匹配并播放；旧版本不支持时
+  helper 提示更新，不退化成歌曲搜索。
 - `InstalledAppLauncher` / `GlobalControlExecutor`：按 Launcher / Leanback 入口匹配
   应用名并打开任意已安装 App；基础方向、确认、返回、主页、媒体和音量操作走无障碍
   全局动作或系统媒体键。
 - `assistant/AssistantAction*`：解析并校验模型返回的结构化动作。当前白名单包含立即
-  打开足球直播、视频搜索、音乐播放、定时足球直播和通用定时提醒。
+  打开足球直播、视频搜索、歌曲播放、音乐内置入口、抖音搜索、定时足球直播和通用
+  定时提醒。
 - `LiveFootballSchedule*`：仅在模型完全不可用时，为旧足球定时请求提供兼容兜底。
 - `ScheduledLiveFootball*`：保存待执行日程，使用 `AlarmManager` 精确或近似定时；
   开机、覆盖安装和精确闹钟授权变化后恢复，并由透明 Activity 到点拉起球迹直播。
@@ -84,10 +89,10 @@ VoiceGatewayService (AccessibilityService)
 3. 编辑连接和系统输入法窗口同时有效时进入听写路径；否则进入助手路径，避免残留
    编辑连接吞掉助手语音键。
 4. 原厂 AIUI 接收麦克风 PCM，并返回中间与最终文本。
-5. 听写路径直接 `commitText`；助手路径先尝试明确的本地立即命令，其余文本连同当前
-   时间、时区和最近两轮对话发给自定义模型。
+5. 听写路径直接 `commitText`；助手路径先尝试无歧义的本地即时命令，裸“播放/观看 +
+   标题”连同当前时间、时区和最近两轮对话发给自定义模型。
 6. 本地命令直接启动目标 App；模型返回普通文本时显示并交给原厂 TTS，需要设备动作时
-   返回受校验的 JSON 动作，由控制器启动 App 或登记未来日程。
+   返回受校验的 JSON 动作，由控制器启动音乐/影视/球迹/抖音或登记未来日程。
 7. 定时动作写入应用私有存储并注册系统闹钟；精确权限缺失时降级为近似调度。
 8. 足球闹钟到点后直接拉起球迹直播；通用提醒默认到点显示问题并朗读，用户确认后再
    执行可选的视频、音乐或直播动作；明确要求自动执行时，到点直接运行该后续动作。
@@ -104,4 +109,7 @@ VoiceGatewayService (AccessibilityService)
   日程不依赖内存。
 - 通用提醒只覆盖有明确未来时刻的一次性任务。没有可靠日期或需要持续轮询的条件不会被
   自动监控，模型应要求用户补充时间，不能声称已经在监控价格、库存或上线状态。
+- 歌单、专辑和推荐电台按 Folia 当前首页卡片名称匹配；未登录、provider 未返回该卡片
+  或用户已改名时无法播放，需要用户先确认入口名称。名称匹配要求唯一；WebView 冷启动
+  时最多等待并重试 20 秒，让账户、曲库和电台数据完成加载。
 - 无障碍服务被关闭或与其他听写服务冲突时，跨应用能力停止。

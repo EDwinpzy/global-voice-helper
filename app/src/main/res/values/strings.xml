@@ -13,6 +13,7 @@
     <string name="assistant_unavailable">语音助手暂时无法回答，请稍后再试。</string>
     <string name="assistant_video_pro_unavailable">未安装 Video Pro，或当前版本不支持语音搜索。</string>
     <string name="assistant_music_app_unavailable">未安装 Music，或当前版本不支持语音点歌。</string>
+    <string name="assistant_music_entry_update_required">Music 当前版本不支持语音入口，请更新 Music 后重试。</string>
     <string name="assistant_live_football_unavailable">未安装球赛直播应用。</string>
     <string name="assistant_app_unavailable">没有找到已安装的应用：%1$s。</string>
     <string name="assistant_douyin_unavailable">未安装抖音 TV，或当前版本不支持语音控制。</string>

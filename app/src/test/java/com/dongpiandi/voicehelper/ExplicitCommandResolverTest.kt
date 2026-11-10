@@ -14,12 +14,9 @@ class ExplicitCommandResolverTest {
             ),
             ExplicitCommandResolver.resolve("我要看流浪地球"),
         )
-        assertEquals(
-            ExplicitCommand.OpenVideoSearch(
-                VideoSearchRequest("凡人修仙传", openFirstResult = true),
-            ),
-            ExplicitCommandResolver.resolve("帮我播放凡人修仙传"),
-        )
+        assertNull(ExplicitCommandResolver.resolve("帮我播放凡人修仙传"))
+        assertNull(ExplicitCommandResolver.resolve("播放晴天"))
+        assertNull(ExplicitCommandResolver.resolve("播放每日推荐"))
         assertEquals(
             ExplicitCommand.PlayMusic("晴天"),
             ExplicitCommandResolver.resolve("我想听晴天"),

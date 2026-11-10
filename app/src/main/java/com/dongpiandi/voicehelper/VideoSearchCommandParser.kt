@@ -10,8 +10,9 @@ internal data class VideoSearchRequest(
 /**
  * Extracts an explicit video search request from an assistant transcript.
  *
- * This intentionally handles only a small, deterministic command set. Anything ambiguous falls
- * through to the normal assistant instead of opening Video Pro.
+ * This intentionally handles only explicit watch/search language or a media noun. A bare
+ * "播放<标题>" falls through to the model so the same title can be classified as music, video or
+ * live football instead of being forced into Video Pro.
  */
 internal object VideoSearchCommandParser {
     private const val MIN_TITLE_LENGTH = 2
@@ -29,8 +30,8 @@ internal object VideoSearchCommandParser {
             CommandPrefix("我要看一下", false, true),
             CommandPrefix("帮我看一下", false, true),
             CommandPrefix("给我看一下", false, true),
-            CommandPrefix("帮我播放", false, true),
-            CommandPrefix("给我播放", false, true),
+            CommandPrefix("帮我播放", true, true),
+            CommandPrefix("给我播放", true, true),
             CommandPrefix("帮我搜索", true, false),
             CommandPrefix("帮我搜", true, false),
             CommandPrefix("帮我找", true, false),
@@ -41,7 +42,7 @@ internal object VideoSearchCommandParser {
             CommandPrefix("我要看", false, true),
             CommandPrefix("帮我看", false, true),
             CommandPrefix("给我看", false, true),
-            CommandPrefix("播放", false, true),
+            CommandPrefix("播放", true, true),
             CommandPrefix("搜索", true, false),
             CommandPrefix("找一下", true, false),
         ).sortedByDescending { it.text.length }
